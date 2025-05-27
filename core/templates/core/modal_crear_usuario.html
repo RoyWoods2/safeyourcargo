@@ -1,0 +1,184 @@
+{% load static %}
+
+<div class="modal fade" id="modal-usuario" tabindex="-1" aria-labelledby="modalUsuarioLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content shadow">
+
+      <style>
+        .modal-content {
+          font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+        }
+
+        .section-container {
+          background: #fff;
+          border-radius: 8px;
+          border: 1px solid #ddd;
+          padding: 1.25rem;
+          margin-bottom: 1.5rem;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+          position: relative;
+        }
+
+        .section-container .badge {
+          position: absolute;
+          top: -0.75rem;
+          left: 1rem;
+          padding: 0.35em 0.75em;
+          font-size: 0.75rem;
+          font-weight: 600;
+          background-color: #0a8754;
+        }
+
+        label {
+          font-weight: 600;
+          font-size: 13px;
+        }
+
+        .form-control, .form-select {
+          font-size: 14px;
+          padding: 6px 12px;
+        }
+      </style>
+
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="modalUsuarioLabel">Crear Usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+
+      <div class="modal-body">
+        <form id="form-usuario" method="post">
+          {% csrf_token %}
+          <input type="hidden" id="usuario_id" name="usuario_id" value="">
+
+          <div class="section-container">
+            <span class="badge text-white">USUARIOS</span>
+
+            <div class="row mb-3 mt-3">
+              <div class="col-md-6">
+                <label for="username" class="form-label">Nombre de Usuario</label>
+                <input type="text" class="form-control" id="username" name="username" required>
+              </div>
+              <div class="col-md-6">
+                <label for="password" class="form-label">Contraseña</label>
+                <div class="input-group">
+                  <input type="password" class="form-control" id="password" name="password">
+                  <button class="btn btn-outline-secondary" type="button" onclick="togglePassword()">
+                    <i class="bi bi-eye" id="toggleIcon"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="role" class="form-label">Rol</label>
+                <select class="form-select" id="role" name="role" required>
+                  <!-- Opciones dinámicas en JS -->
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="cliente" class="form-label">Razón Social Cliente</label>
+                <select class="form-select" id="cliente" name="cliente" required>
+                  <option value="">Selecciona un cliente</option>
+                  {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}">{{ cliente.nombre }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-usuario">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function togglePassword() {
+  const input = document.getElementById("password");
+  const icon = document.getElementById("toggleIcon");
+  if (input.type === "password") {
+    input.type = "text";
+    icon.classList.remove("bi-eye");
+    icon.classList.add("bi-eye-slash");
+  } else {
+    input.type = "password";
+    icon.classList.remove("bi-eye-slash");
+    icon.classList.add("bi-eye");
+  }
+}
+
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+      cookie = cookie.trim();
+      if (cookie.startsWith(name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+// Configura dinámicamente el <select> de rol según el rol del usuario actual
+document.querySelectorAll('[data-bs-target="#modal-usuario"]').forEach(button => {
+  button.addEventListener("click", function () {
+    const rolSelect = document.getElementById("role");
+    const usuarioActualRol = "{{ rol_actual }}";
+
+    // Limpiar opciones
+    rolSelect.innerHTML = "";
+
+    if (usuarioActualRol === "Superusuario") {
+      rolSelect.innerHTML = `
+        <option value="Usuario">Usuario</option>
+        <option value="Administrador">Administrador</option>
+        <option value="Revendedor">Revendedor</option>`;
+    } else {
+      rolSelect.innerHTML = `<option value="Revendedor" selected>Revendedor</option>`;
+    }
+  });
+});
+
+document.getElementById("btn-guardar-usuario").addEventListener("click", function () {
+  const form = document.getElementById("form-usuario");
+  const formData = new FormData(form);
+
+  fetch("{% url 'form_usuario' %}", {
+    method: "POST",
+    headers: {
+      "X-CSRFToken": getCookie("csrftoken"),
+      "X-Requested-With": "XMLHttpRequest"
+    },
+    body: formData
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        alert("Usuario guardado correctamente.");
+        location.reload();
+      } else if (data.errors) {
+        let mensaje = "Errores en el formulario:\n";
+        for (const [campo, errores] of Object.entries(data.errors)) {
+          mensaje += `- ${campo}: ${errores.join(", ")}\n`;
+        }
+        alert(mensaje);
+      } else if (data.error) {
+        alert(data.error);
+      }
+    })
+    .catch(error => {
+      console.error("Error al enviar formulario:", error);
+      alert("Ocurrió un error inesperado. Revisa consola.");
+    });
+});
+</script>

@@ -1,0 +1,155 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Certificado de Transporte</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      margin: 10px;
+      padding: 0;
+      color: #000;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 5px;
+    }
+
+    .logo img {
+      max-width: 240px;
+      max-height: 50px;
+    }
+
+    .cert-info {
+      text-align: right;
+      font-size: 10px;
+    }
+
+    .section-title {
+      background-color: #555;
+      color: #fff;
+      padding: 4px 6px;
+      font-weight: bold;
+      font-size: 11px;
+      margin-top: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+
+    th, td {
+      border: 1px solid #888;
+      padding: 5px;
+      vertical-align: top;
+    }
+
+    .info-table td {
+      border: none;
+      padding: 2px 4px;
+    }
+
+    .bottom-note {
+      font-size: 9px;
+      margin-top: 20px;
+    }
+
+    .firma {
+      text-align: right;
+      margin-top: 40px;
+    }
+
+    .qr-section {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .qr-section img {
+      width: 110px;
+      height: 110px;
+    }
+
+    .qr-text {
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <img src="{% static 'img/logo_ws.png' %}" alt="Logo">
+    </div>
+    <div class="cert-info">
+      <p>
+        <br>
+        Certificado Nº: C-{{ certificado.id }}<br>
+        Póliza Nº: 01930324AA<br>
+        Emitido: {{ certificado.fecha_partida|date:"Y-m-d" }}
+      </p>
+    </div>
+  </div>
+
+  <p style="margin: 8px 0;">
+    Por el presente certificado, constatamos que <strong>{{ certificado.cliente.nombre }}</strong> posee cobertura de transporte con vigencia desde {{ certificado.fecha_partida|date:"Y-m-d" }} para el siguiente viaje:
+  </p>
+
+  <div class="section-title">Datos de Cliente</div>
+  <table>
+    <tr><td><strong>Asegurado:</strong> {{ certificado.cliente.nombre }}</td><td><strong>RUT:</strong> {{ certificado.cliente.rut }}</td></tr>
+    <tr><td><strong>Dirección:</strong> {{ certificado.cliente.direccion }}</td><td></td></tr>
+    <tr><td><strong>País:</strong> {{ certificado.cliente.pais }}</td><td><strong>Ciudad:</strong> {{ certificado.cliente.ciudad }}</td></tr>
+  </table>
+
+  <div class="section-title">Transporte</div>
+  <table>
+    <tr><td><strong>Fecha Embarque:</strong> {{ certificado.fecha_partida }}</td><td><strong>Cláusula:</strong> Cláusula {{ certificado.metodo_embarque.clausula }}</td></tr>
+    <tr><td><strong>País Origen:</strong> {{ certificado.ruta.pais_origen }}</td><td><strong>Ciudad Origen:</strong> {{ certificado.ruta.ciudad_origen }}</td></tr>
+    <tr><td><strong>País Destino:</strong> {{ certificado.ruta.pais_destino }}</td><td><strong>Ciudad Destino:</strong> {{ certificado.ruta.ciudad_destino }}</td></tr>
+    <tr><td><strong>Modo de Transporte:</strong> {{ certificado.metodo_embarque.modo_transporte }}</td><td><strong>Embalaje:</strong> {{ certificado.metodo_embarque.embalaje }}</td></tr>
+    <tr><td><strong>Nombre Nave / Transporte:</strong> {{ certificado.viaje.nombre_avion }}</td><td><strong>Tipo Carga:</strong> {{ certificado.metodo_embarque.tipo_carga }}</td></tr>
+    <tr><td><strong>Puerto Origen / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_origen }}</td><td><strong>Puerto Destino / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_destino }}</td></tr>
+    <tr><td><strong>Nº Documento de Transporte:</strong> {{ certificado.viaje.numero_viaje }}</td><td><strong>Referencias:</strong> {{ certificado.notas.referencia }}</td></tr>
+  </table>
+
+  <div class="section-title">Prima y Seguro</div>
+  <table>
+    <tr><td colspan="2"><strong>Descripción Carga:</strong> {{ certificado.viaje.descripcion_carga }}</td></tr>
+    <tr><td><strong>Monto Asegurado:</strong> USD ${{ certificado.tipo_mercancia.monto_asegurado }}</td><td><strong>Valor Prima:</strong> USD ${{ certificado.tipo_mercancia.valor_prima }}</td></tr>
+  </table>
+
+  <div class="section-title">Instrucciones Importantes en Caso de Siniestro</div>
+  <div class="qr-section">
+    <img src="{% static 'img/qr_ejemplo.png' %}" alt="QR">
+    <div class="qr-text">
+      <p><strong>Opcion 1:</strong> Escanear el código QR para contacto directo.</p>
+      <p><strong>Opcion 2:</strong> Ponerse en contacto lo antes posible con su ejecutivo de
+ventas y enviar correo a: siniestros@safeyourcargo.com dejando como
+asunto SINIESTRO y el número de certificado.
+    </div>
+  </div>
+
+  <p class="bottom-note">
+    <strong>Una vez realizado el aviso de siniestro se procederá a coordinar la inspección con un liquidador asignado
+Al tener conocimiento de un siniestro producido por alguno de los riesgos amparados por esta Póliza, el Asegurado, sus depositarios o
+causahabientes, deberán actuar para la protección de los bienes y por lo tanto, entablarán reclamación o juicio y, en su caso, viajarán y
+harán las gestiones necesarias para la salvaguarda o recuperación de los bienes por parte de ellos y cuidarán de que todos los derechos
+en contra de porteadores depositarios u otras personas estén debidamente salvaguardados y los actos relativos ejecutados, todo esto
+siempre que no esté en riesgo la salud, integridad física de las personas</strong>
+  </p>
+
+  <div class="firma">
+    <img src="{% static 'img/firma.png' %}" style="width: 110px;"><br>
+    <strong>WSG London</strong><br>
+    Representante Legal
+  </div>
+</body>
+</html>

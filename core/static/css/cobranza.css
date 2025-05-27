@@ -1,0 +1,56 @@
+#cobranzaTable-container {
+  overflow-x: auto;
+}
+
+#cobranzaTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-family: "Arial Narrow", sans-serif;
+  font-size: 10px;
+}
+
+#cobranzaTable thead th {
+  background: #f0f0f0;
+  font-size: 9px;
+  font-weight: 600;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap; /* 👈 Mantener encabezados en una sola línea */
+  word-break: normal;
+  padding: 6px 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+#cobranzaTable tbody td {
+  color: #555;
+  padding: 6px 10px;
+  vertical-align: middle;
+  border-bottom: 1px solid #eee;
+  white-space: normal;
+  word-break: break-word;
+}
+
+#cobranzaTable tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+#cobranzaTable tbody tr:hover {
+  background: #f5f5f5;
+}
+
+#cobranzaTable .pdf-icon {
+  color: red;
+  margin-right: 4px;
+}
+
+.dataTables_wrapper .dataTables_filter {
+  text-align: right;
+}
+
+.dataTables_wrapper .dataTables_paginate {
+  text-align: right;
+}

@@ -1,0 +1,234 @@
+{% load static %}
+<div class="modal fade" id="modal-cliente" tabindex="-1" aria-labelledby="modalClienteLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+      <style>
+        body, .modal-content {
+          font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+        }
+
+        .section-container {
+          background: #fff;
+          border-radius: 8px;
+          border: 1px solid #ddd;
+          padding: 1.25rem;
+          margin-bottom: 1.5rem;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+          position: relative;
+        }
+
+        .section-container .badge {
+          position: absolute;
+          top: -0.75rem;
+          left: 1rem;
+          padding: 0.35em 0.75em;
+          font-size: 0.75rem;
+          font-weight: 600;
+          background-color: #0a8754;
+        }
+
+        label {
+          font-weight: 600;
+          font-size: 13px;
+        }
+
+        .form-control, .form-select {
+          font-size: 14px;
+          padding: 6px 12px;
+        }
+      </style>
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalClienteLabel">Crear Nuevo Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="form-cliente" method="post">
+          {% csrf_token %}
+          <input type="hidden" id="cliente_id" name="cliente_id" value="">
+
+          <!-- DATOS CLIENTE -->
+          <div class="section-container">
+            <span class="badge text-white">DATOS CLIENTE</span>
+            <div class="row mb-3 mt-3">
+              <div class="col">
+                <label class="form-label">Tipo Cliente</label>
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="tipo_cliente" id="tipo_empresa" value="empresa" checked>
+                  <label class="btn btn-outline-primary" for="tipo_empresa">Empresa</label>
+                  <input type="radio" class="btn-check" name="tipo_cliente" id="tipo_persona" value="persona">
+                  <label class="btn btn-outline-primary" for="tipo_persona">Persona</label>
+                </div>
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="nombre" class="form-label">Nombre</label>
+                <input type="text" class="form-control" id="nombre" name="nombre" required>
+              </div>
+              <div class="col-md-6">
+                <label for="rut" class="form-label">RUT</label>
+                <input type="text" class="form-control" id="rut" name="rut" required>
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="correo" class="form-label">Correo Electrónico</label>
+                <input type="email" class="form-control" id="correo" name="correo" required>
+              </div>
+              <div class="col-md-6">
+                <label for="telefono" class="form-label">Teléfono</label>
+                <input type="text" class="form-control" id="telefono" name="telefono" required>
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-12">
+                <label for="direccion" class="form-label">Dirección</label>
+                <textarea class="form-control" id="direccion" name="direccion" rows="2" required></textarea>
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label for="pais" class="form-label">País</label>
+                <select id="pais" name="pais" class="form-select" required>
+                  <option value="">Selecciona un país</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="ciudad" class="form-label">Ciudad</label>
+                <select id="ciudad" name="ciudad" class="form-select" required>
+                  <option value="">Seleccionar ciudad</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="region" class="form-label">Región</label>
+                <input type="text" id="region" name="region" class="form-control" required>
+              </div>
+              <div class="col-md-4 mt-3">
+                <label for="codigo_postal" class="form-label">Código Postal</label>
+                <input type="text" class="form-control" id="codigo_postal" name="codigo_postal" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARGA SECA -->
+          <div class="section-container">
+            <span class="badge text-white">CARGA SECA</span>
+            <div class="row mb-3 mt-3">
+              <div class="col-md-6">
+                <label for="tasa" class="form-label">Tasa Carga Seca</label>
+                <input type="number" class="form-control" id="tasa" name="tasa" step="0.001" required>
+              </div>
+              <div class="col-md-6">
+                <label for="valor_minimo" class="form-label">Valor Mínimo</label>
+                <input type="number" class="form-control" id="valor_minimo" name="valor_minimo" step="0.001" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARGA CONGELADA -->
+          <div class="section-container">
+            <span class="badge text-white">CARGA CONGELADA</span>
+            <div class="row mb-3 mt-3">
+              <div class="col-md-6">
+                <label for="tasa_congelada" class="form-label">Tasa Carga Congelada</label>
+                <input type="number" class="form-control" id="tasa_congelada" name="tasa_congelada" step="0.001" required>
+              </div>
+              <div class="col-md-6">
+                <label for="valor_minimo_congelado" class="form-label">Valor Mínimo Congelado</label>
+                <input type="number" class="form-control" id="valor_minimo_congelado" name="valor_minimo_congelado" step="0.001" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRAMO COBRO -->
+          <div class="section-container">
+            <span class="badge text-white">TRAMO COBRO</span>
+            <div class="row mb-3 mt-3">
+              <div class="col-md-6">
+                <label for="tramo_cobro" class="form-label">Tramo de Cobro (días)</label>
+                <input type="number" class="form-control" id="tramo_cobro" name="tramo_cobro" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Tipo Alcance</label>
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="tipo_alcance" id="minorista" value="minorista" checked>
+                  <label class="btn btn-outline-primary" for="minorista">Minorista</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="submit" class="btn btn-primary" form="form-cliente">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+fetch("{% static 'js/paises_ciudades.json' %}")
+  .then(res => res.json())
+  .then(data => {
+    const paisSelect = document.getElementById("pais");
+    const ciudadSelect = document.getElementById("ciudad");
+
+    paisSelect.innerHTML = '<option value="">Selecciona un país</option>';
+    Object.keys(data).sort().forEach(pais => {
+      paisSelect.innerHTML += `<option value="${pais}">${pais}</option>`;
+    });
+
+    paisSelect.addEventListener("change", function () {
+      const ciudades = data[this.value] || [];
+      ciudadSelect.innerHTML = '<option value="">Selecciona una ciudad</option>';
+      ciudades.forEach(ciudad => {
+        ciudadSelect.innerHTML += `<option value="${ciudad}">${ciudad}</option>`;
+      });
+    });
+  });
+
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+      cookie = cookie.trim();
+      if (cookie.startsWith(name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+document.getElementById("form-cliente").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+
+  fetch("{% url 'form_cliente' %}", {
+    method: "POST",
+    headers: {
+      "X-CSRFToken": getCookie("csrftoken"),
+      "X-Requested-With": "XMLHttpRequest"
+    },
+    body: formData
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        location.reload();
+      } else {
+        alert("Error al guardar cliente.");
+      }
+    })
+    .catch(err => {
+      console.error("Error al enviar formulario:", err);
+    });
+});
+</script>

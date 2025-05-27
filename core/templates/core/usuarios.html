@@ -1,0 +1,226 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Administración de Usuarios - Safe Your Cargo{% endblock %}
+
+{% block content %}
+<style>
+  table thead th {
+    background: #f0f2f5;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    line-height: 1rem;
+    color: #6c7a91;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+    white-space: nowrap;
+    border-top-width: 1px;
+    font-family: "Inter Var", Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  td, th {
+    font-size: 13px;
+  }
+</style>
+
+<div class="page-wrapper">
+  <div class="page-header d-print-none">
+    <div class="container-xl">
+      <div class="row g-2 align-items-center">
+        <div class="col">
+          <div class="page-pretitle">Administración de</div>
+          <h2 class="page-title">Usuarios</h2>
+        </div>
+        <div class="col-auto ms-auto d-print-none">
+          <div class="btn-list">
+            <a href="#" class="btn btn-primary d-none d-sm-inline-block" data-bs-toggle="modal" data-bs-target="#modal-usuario" style="background-color:#009925">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5l0 14" /><path d="M5 12l14 0" />
+              </svg>
+              Nuevo Usuario
+            </a>
+            <a href="#" class="btn btn-primary d-sm-none btn-icon" data-bs-toggle="modal" data-bs-target="#modal-usuario" aria-label="Crear usuario">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5l0 14" /><path d="M5 12l14 0" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-body">
+    <div class="container-xl">
+      <div class="row row-deck row-cards">
+        <div class="container mt-4" style="overflow-x: auto;">
+          <table id="tabla-usuarios" class="table table-hover table-bordered align-middle text-nowrap">
+            <thead>
+              <tr>
+                <th>ESTADO</th>
+                <th>USERNAME</th>
+                <th>ROL</th>
+                <th>CLIENTE</th>
+                <th>ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+  {% for usuario in usuarios %}
+  <tr>
+    <td>
+      <span class="badge {% if usuario.is_active %}bg-success{% else %}bg-danger{% endif %} estado-label">
+        {% if usuario.is_active %}Activo{% else %}Inactivo{% endif %}
+      </span>
+    </td>
+    <td>{{ usuario.username }}</td>
+    <td>{{ usuario.rol }}</td>
+    <td>{{ usuario.cliente.nombre }}</td>
+    <td>
+      <button type="button" class="btn btn-outline-secondary btn-sm mt-1 editar-usuario"
+              data-id="{{ usuario.id }}"
+              data-username="{{ usuario.username }}"
+              data-rol="{{ usuario.rol }}"
+              data-cliente="{{ usuario.cliente.id }}">
+        Editar
+      </button>
+
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm mt-1 toggle-estado-btn"
+              data-id="{{ usuario.id }}"
+              data-estado="{{ usuario.is_active }}">
+        {% if usuario.is_active %}Desactivar{% else %}Activar{% endif %}
+      </button>
+    </td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="5" class="text-center text-muted">No hay usuarios registrados aún.</td>
+  </tr>
+  {% endfor %}
+</tbody>
+
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'core/modal_crear_usuario.html' %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tabla = document.getElementById("tabla-usuarios");
+
+  // ELIMINAR USUARIO
+  tabla.querySelectorAll(".eliminar-usuario").forEach(button => {
+    button.addEventListener("click", function () {
+      const userId = this.dataset.id;
+      const csrftoken = getCookie("csrftoken");
+
+      if (!userId) {
+        alert("ID de usuario no válido.");
+        return;
+      }
+
+      if (confirm("¿Estás seguro de eliminar este usuario?")) {
+        fetch(`/usuarios/eliminar/${userId}/`, {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json"
+          }
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("Error HTTP " + res.status);
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            alert("Usuario eliminado.");
+            location.reload();
+          } else {
+            alert(data.error || "No se pudo eliminar el usuario.");
+          }
+        })
+        .catch(err => {
+          console.error("Error al eliminar:", err);
+          alert("Error inesperado.");
+        });
+      }
+    });
+  });
+
+  // EDITAR USUARIO
+  tabla.querySelectorAll(".editar-usuario").forEach(button => {
+    button.addEventListener("click", function () {
+      document.getElementById("usuario_id").value = this.dataset.id;
+      document.getElementById("username").value = this.dataset.username;
+      document.getElementById("password").value = "";
+      document.getElementById("role").value = this.dataset.rol;
+      document.getElementById("cliente").value = this.dataset.cliente;
+      document.getElementById("modalUsuarioLabel").textContent = "Editar Usuario";
+      new bootstrap.Modal(document.getElementById("modal-usuario")).show();
+    });
+  });
+
+  // CSRF
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  tabla.querySelectorAll(".toggle-estado-btn").forEach(button => {
+    button.addEventListener("click", function () {
+      const userId = this.dataset.id;
+      const csrftoken = getCookie("csrftoken");
+      const row = this.closest("tr");
+      const badge = row.querySelector(".estado-label");
+
+      fetch(`/usuarios/toggle-estado/${userId}/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": csrftoken,
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          if (data.estado) {
+            badge.classList.remove("bg-danger");
+            badge.classList.add("bg-success");
+            badge.textContent = "Activo";
+            this.textContent = "Desactivar";
+          } else {
+            badge.classList.remove("bg-success");
+            badge.classList.add("bg-danger");
+            badge.textContent = "Inactivo";
+            this.textContent = "Activar";
+          }
+        } else {
+          alert("No se pudo cambiar el estado.");
+        }
+      })
+      .catch(err => {
+        console.error("Error al cambiar estado:", err);
+        alert("Error inesperado.");
+      });
+    });
+  });
+
+});
+</script>
+
+{% endblock %}

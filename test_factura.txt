@@ -1,0 +1,6 @@
+->Boleta<-
+41;0;2025-05-23;3;0;;;;78087058-3;77.094.592-5;Assesor Chile SpA;PARTICULAR;Papudo 450;Valparaíso;Valparaíso;correo@cliente.cl;
+->BoletaTotales<-
+0;0;0;0;0;0;0;0;
+->BoletaDetalle<-
+1;Seguro de carga;Certificado C-1;1;1;0;0;0;INT1;UN;;

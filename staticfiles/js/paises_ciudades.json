@@ -1,0 +1,82 @@
+{
+  "Argentina": [
+    "Buenos Aires",
+    "Córdoba",
+    "Rosario",
+    "Mendoza",
+    "La Plata",
+    "San Miguel de Tucumán",
+    "Mar del Plata"
+  ],
+  "Bolivia": [
+    "La Paz",
+    "Santa Cruz de la Sierra",
+    "Cochabamba",
+    "Oruro",
+    "Sucre",
+    "Tarija"
+  ],
+  "Chile": [
+    "Santiago",
+    "Valparaíso",
+    "Concepción",
+    "La Serena",
+    "Antofagasta",
+    "Temuco",
+    "Puerto Montt"
+  ],
+  "Colombia": [
+    "Bogotá",
+    "Medellín",
+    "Cali",
+    "Barranquilla",
+    "Cartagena",
+    "Bucaramanga"
+  ],
+  "Ecuador": [
+    "Quito",
+    "Guayaquil",
+    "Cuenca",
+    "Ambato",
+    "Manta",
+    "Portoviejo"
+  ],
+  "Mexico": [
+    "Ciudad de México",
+    "Guadalajara",
+    "Monterrey",
+    "Puebla",
+    "Tijuana",
+    "Cancún",
+    "Querétaro"
+  ],
+  "Paraguay": [
+    "Asunción",
+    "Ciudad del Este",
+    "Encarnación",
+    "San Lorenzo"
+  ],
+  "Peru": [
+    "Lima",
+    "Arequipa",
+    "Trujillo",
+    "Cusco",
+    "Piura",
+    "Chiclayo"
+  ],
+  "Uruguay": [
+    "Montevideo",
+    "Salto",
+    "Paysandú",
+    "Maldonado"
+  ],
+  "Venezuela": [
+    "Caracas",
+    "Maracaibo",
+    "Valencia",
+    "Barquisimeto",
+    "Maracay",
+    "Barcelona",
+    "Ciudad Guayana"
+  ]
+}

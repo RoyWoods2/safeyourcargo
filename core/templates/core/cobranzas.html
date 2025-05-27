@@ -1,0 +1,117 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Administración de Cobranzas - Safe Your Cargo{% endblock %}
+
+{% block content %}
+<style>
+  table thead th {
+    background: #f0f2f5;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    line-height: 1rem;
+    color: #6c7a91;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+    white-space: nowrap; /* 👈 Encabezados en una sola línea */
+    font-family: "Inter Var", Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  td, th {
+    font-size: 13px;
+  }
+  .encabezado-cobranzas {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #6c7a91;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 1rem;
+  }
+  .dataTables_wrapper .dataTables_length,
+  .dataTables_wrapper .dataTables_filter {
+    font-size: 0.875rem;
+    color: #6c7a91;
+  }
+  .dataTables_wrapper .dataTables_length label,
+  .dataTables_wrapper .dataTables_filter label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+  .dataTables_wrapper .dataTables_filter input {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.875rem;
+  }
+</style>
+
+<div class="container mt-4">
+  <div class="encabezado-cobranzas">Consultar Cobranzas</div>
+  <div style="overflow-x: auto;">
+    <table id="cobranzaTable" class="table table-hover table-bordered align-middle text-nowrap">
+
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>ID Reports</th>
+        <th>Reseller</th>
+        <th>Razón Social Asegurado</th>
+        <th>Fecha Solicitud</th>
+        <th>Tipo Movimiento</th>
+        <th>Tipo Carga</th>
+        <th>Valor FCA</th>
+        <th>Valor Flete</th>
+        <th>Monto Asegurado</th>
+        <th>Valor Prima</th>
+        <th>Valor Prima Cobro</th>
+        <th>Valor Prima Pago</th>
+        <th>Fecha Cobro</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cobro in cobranzas %}
+      <tr>
+
+        <td>{{ cobro.certificado.id }}</td>
+        <td>{{ cobro.certificado.id|add:"100" }}</td>
+        <td>{{ cobro.certificado.cliente.nombre }}</td>
+        <td>{{ cobro.certificado.cliente.nombre }}</td>
+        <td>{{ cobro.certificado.fecha_partida }}</td>
+        <td>{{ cobro.certificado.metodo_embarque.modo_transporte }}</td>
+        <td>{{ cobro.certificado.metodo_embarque.get_tipo_carga_display }}</td>
+        <td>${{ cobro.valor_fca }}</td>
+        <td>${{ cobro.valor_flete }}</td>
+        <td>${{ cobro.monto_asegurado }}</td>
+        <td>${{ cobro.valor_prima_estimado }}</td>
+        <td>${{ cobro.valor_prima_cobro }}</td>
+        <td>${{ cobro.valor_prima_pago }}</td>
+        <td>{{ cobro.fecha_cobro|default:"-" }}</td>
+        <td>{{ cobro.get_estado_display }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="16" class="text-center text-muted">No hay cobranzas registradas aún.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+  $(document).ready(function() {
+    $('#cobranzaTable').DataTable({
+      order: [[1, 'desc']],
+      language: {
+        url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json'
+      }
+    });
+  });
+</script>
+{% endblock %}

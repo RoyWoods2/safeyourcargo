@@ -1,0 +1,157 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+  <div>
+    <h2 class="fw-bold mb-0">Certificados de Transporte</h2>
+    <small class="text-muted">Visualiza y crea certificados fácilmente</small>
+  </div>
+  <div>
+    <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-certificado">Nuevo Certificado</a>
+  </div>
+</div>
+
+<!-- FILTROS -->
+<form class="row mb-4 gx-3">
+  <div class="col-md-3">
+    <label class="form-label">Fecha Inicio:</label>
+    <input type="date" name="inicio" class="form-control">
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Fecha Fin:</label>
+    <input type="date" name="fin" class="form-control">
+  </div>
+  <div class="col-md-4 ms-auto">
+    <label class="form-label">Buscar:</label>
+    <input type="text" name="q" class="form-control" placeholder="Buscar por cliente o número">
+  </div>
+</form>
+
+<!-- TABLA DE CERTIFICADOS -->
+<table class="table table-sm table-hover table-bordered shadow-sm rounded bg-white small">
+  <thead class="table-light">
+    <tr class="align-middle text-center">
+      <th>#</th>
+      <th>N° Certificado</th>
+      <th>N° Factura</th>
+      <th>Cliente</th>
+      <th>RUT</th>
+      <th>Dirección</th>
+      <th>PDF Certificado</th>
+      <th>PDF Factura</th>
+    </tr>
+  </thead>
+  <tbody class="align-middle text-center">
+    {% for cert in certificados %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>C-{{ cert.id }}</td>
+      <td>{{ cert.notas.numero_factura }}</td>
+      <td>{{ cert.cliente.nombre }}</td>
+      <td>{{ cert.cliente.rut }}</td>
+      <td>{{ cert.cliente.direccion }}, {{ cert.cliente.ciudad }}, {{ cert.cliente.region }}</td>
+      <td>
+        <a href="{% url 'certificado_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-danger">
+          <i class="bi bi-file-earmark-pdf"></i>
+        </a>
+      </td>
+      <td>
+        <a href="{% url 'factura_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-file-earmark-pdf"></i>
+        </a>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="text-center text-muted">No hay certificados registrados.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- PAGINACIÓN -->
+{% if certificados.has_other_pages %}
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    {% if certificados.has_previous %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ certificados.previous_page_number }}">Anterior</a>
+    </li>
+    {% endif %}
+
+    {% for num in certificados.paginator.page_range %}
+      {% if certificados.number == num %}
+      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+      {% else %}
+      <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+      {% endif %}
+    {% endfor %}
+
+    {% if certificados.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ certificados.next_page_number }}">Siguiente</a>
+    </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+<!-- MODAL DE CREACIÓN -->
+{% include "certificados/modal_crear_certificado.html" %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const embalajeSelect = document.getElementById("id_embalaje");
+  const tipoContainerSelect = document.getElementById("id_tipo_container");
+  const modoTransporteSelect = document.getElementById("id_modo_transporte");
+
+  const grupoTipoContainer = document.getElementById("grupo_tipo_container");
+  const grupoOtroTipoContainer = document.getElementById("grupo_otro_tipo_container");
+  const grupoOtroEmbalaje = document.getElementById("grupo_otro_embalaje");
+  const grupoTipoEmbalajeDetallado = document.getElementById("grupo_tipo_embalaje_detallado");
+
+  function actualizarCamposEmbalaje() {
+    const embalaje = embalajeSelect.value;
+    const tipoContainer = tipoContainerSelect.value;
+    const modo = modoTransporteSelect.value;
+
+    grupoTipoContainer.classList.add("d-none");
+    grupoOtroTipoContainer.classList.add("d-none");
+    grupoOtroEmbalaje.classList.add("d-none");
+    grupoTipoEmbalajeDetallado.classList.add("d-none");
+
+    if (modo === "Aereo") {
+      embalajeSelect.value = "AIR";
+      embalajeSelect.setAttribute("readonly", true);
+      grupoTipoEmbalajeDetallado.classList.remove("d-none");
+    } else {
+      embalajeSelect.removeAttribute("readonly");
+
+      if (embalaje === "FCL") {
+        grupoTipoContainer.classList.remove("d-none");
+        if (tipoContainer === "OTRO") {
+          grupoOtroTipoContainer.classList.remove("d-none");
+        }
+      }
+
+      if (embalaje === "LCL") {
+        grupoTipoEmbalajeDetallado.classList.remove("d-none");
+      }
+    }
+  }
+
+  modoTransporteSelect.addEventListener("change", () => {
+    actualizarCamposEmbalaje();
+    embalajeSelect.dispatchEvent(new Event("change"));
+  });
+
+  if (embalajeSelect) embalajeSelect.addEventListener("change", actualizarCamposEmbalaje);
+  if (tipoContainerSelect) tipoContainerSelect.addEventListener("change", actualizarCamposEmbalaje);
+
+  actualizarCamposEmbalaje();
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,193 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Factura Exenta</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      margin: 10px;
+      color: #000;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .empresa {
+      font-size: 12px;
+    }
+    .factura-info {
+      border: 2px solid red;
+      color: red;
+      text-align: center;
+      padding: 10px;
+      font-size: 12px;
+      width: 200px;
+    }
+    .factura-info strong {
+      font-size: 14px;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .section {
+      margin-top: 12px;
+      font-size: 11px;
+    }
+    .datos-container {
+      border: 2px solid #000;
+      padding: 6px 10px;
+    }
+    .datos-tabla td {
+      padding: 3px 5px;
+    }
+    table.detalle {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      font-size: 10px;
+    }
+    table.detalle th {
+      background-color: #000;
+      color: #fff;
+      padding: 6px;
+      font-weight: bold;
+      border: 1px solid #000;
+    }
+    table.detalle td {
+      border: 1px solid #000;
+      padding: 6px;
+      vertical-align: top;
+    }
+    .total-text {
+      text-transform: uppercase;
+      margin-top: 25px;
+      font-size: 10px;
+    }
+    .resumen {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+    .resumen table {
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+    .resumen td {
+      padding: 4px 10px;
+      border: 1px solid #000;
+    }
+    .barcode {
+      margin-top: 20px;
+      height: 80px;
+      background: url('{% static "img/barcode.png" %}') no-repeat;
+      background-size: contain;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="empresa">
+      <strong>SAFEYOURCARGO SPA</strong><br>
+      Gestión para seguros de carga de importación de forma online<br>
+      <br>
+      Dirección:<br>
+      Reñaca Norte 265 Of 510 R<br>
+      Viña del Mar
+    </div>
+    <div class="factura-info">
+      <strong>R.U.T.: 78.087.058-3</strong>
+      FACTURA NO AFECTA O<br>
+      EXENTA ELECTRONICA<br>
+      <strong>Nº {{ factura.numero }}</strong>
+      <br>
+      S.I.I. - VIÑA DEL MAR<br>
+      {{ fecha_formateada|upper }}
+    </div>
+  </div>
+
+  <div class="section datos-container">
+    <table class="datos-tabla">
+      <tr>
+        <td><strong>Señor(es):</strong> {{ factura.razon_social }}</td>
+        <td><strong>Teléfono:</strong> </td>
+      </tr>
+      <tr>
+        <td><strong>RUT:</strong> {{ factura.rut }}</td>
+        <td><strong>Vencimiento:</strong> </td>
+      </tr>
+      <tr>
+        <td><strong>Giro:</strong> FABRICACIÓN Y VENTAS DE PRODUCTOS PARA E</td>
+        <td><strong>Forma de Pago:</strong> </td>
+      </tr>
+      <tr>
+        <td><strong>Dirección:</strong> {{ factura.direccion }}</td>
+        <td><strong>Vendedor:</strong> </td>
+      </tr>
+      <tr>
+        <td><strong>Comuna:</strong> {{ factura.comuna }}</td>
+        <td><strong>Ciudad:</strong> {{ factura.ciudad }}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Referencia:</strong> {{ factura.certificado.notas.referencia }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <table class="detalle">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Código</th>
+        <th>Descripción</th>
+        <th>U.M.</th>
+        <th>Cant.</th>
+        <th>Precio Unit.</th>
+        <th>Valor Dcto.</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>0</td>
+        <td>SEGURO DE CARGA<br>
+          DESPACHO {{ factura.certificado.notas.guia_carga }}<br>
+          C-{{ factura.certificado.id }}<br>
+          TC {{ factura.tipo_cambio }}<br>
+          PRIMA USD$ {{ factura.valor_usd }}
+        </td>
+        <td>UN</td>
+        <td>1.00</td>
+        <td>{{ factura.valor_clp|floatformat:0 }}</td>
+        <td>0.00</td>
+        <td>{{ factura.valor_clp|floatformat:0 }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="total-text">
+  SON: {{ total_palabras|upper }} PESOS.--
+</p>
+
+
+  <div class="resumen">
+    <table>
+      <tr>
+        <td>Exento:</td>
+        <td>$ {{ factura.valor_clp|floatformat:0 }}</td>
+      </tr>
+      <tr>
+        <td>Total:</td>
+        <td>$ {{ factura.valor_clp|floatformat:0 }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="barcode"></div>
+
+</body>
+</html>

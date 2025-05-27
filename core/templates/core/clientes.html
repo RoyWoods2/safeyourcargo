@@ -1,0 +1,250 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Administración de Clientes - Safe Your Cargo{% endblock %}
+
+{% block content %}
+<style>
+  table thead th {
+    background: #f0f2f5;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    line-height: 1rem;
+    color: #6c7a91;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+    white-space: nowrap;
+    border-top-width: 1px;
+    font-family: "Inter Var", Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+</style>
+
+<div class="page-wrapper">
+  <!-- Page header -->
+  <div class="page-header d-print-none">
+    <div class="container-xl">
+      <div class="row g-2 align-items-center">
+        <div class="col">
+          <div class="page-pretitle">Administración de</div>
+          <h2 class="page-title">Clientes</h2>
+        </div>
+        <div class="col-auto ms-auto d-print-none">
+          <div class="btn-list">
+            <a href="#" class="btn btn-primary d-none d-sm-inline-block" data-bs-toggle="modal" data-bs-target="#modal-cliente" style="background-color:#009925">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5l0 14" /><path d="M5 12l14 0" />
+              </svg>
+              Nuevo Cliente
+            </a>
+            <a href="#" class="btn btn-primary d-sm-none btn-icon" data-bs-toggle="modal" data-bs-target="#modal-cliente" aria-label="Crear cliente">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5l0 14" /><path d="M5 12l14 0" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page body -->
+  <div class="page-body">
+    <div class="container-xl">
+      <div class="row row-deck row-cards">
+        <div class="container mt-4" id="clientesTable-container" style="overflow-x: auto;">
+          <table id="clientesTable" class="table table-hover table-bordered align-middle text-nowrap">
+            <thead>
+              <tr>
+                <th>Razón Social</th>
+                <th>RUT</th>
+                <th>Dirección</th>
+                <th>Teléfono</th>
+                <th>Correo</th>
+                <th>País</th>
+                <th>Ciudad</th>
+                <th>Región</th>
+                <th>Código Postal</th>
+                <th>Tasa</th>
+                <th>Tasa Congelada</th>
+                <th>Valor Mínimo</th>
+                <th>Valor Mínimo Congelado</th>
+                <th>Estado</th>
+                <th>Tramo Cobro</th>
+                <th>Tipo Cliente</th>
+                <th>Tipo Alcance</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cliente in clientes %}
+              <tr>
+                <td>{{ cliente.nombre }}</td>
+                <td>{{ cliente.rut }}</td>
+                <td>{{ cliente.direccion }}</td>
+                <td>{{ cliente.telefono }}</td>
+                <td>{{ cliente.correo }}</td>
+                <td>{{ cliente.pais }}</td>
+                <td>{{ cliente.ciudad }}</td>
+                <td>{{ cliente.region }}</td>
+                <td>{{ cliente.codigo_postal }}</td>
+                <td>{{ cliente.tasa }}</td>
+                <td>{{ cliente.tasa_congelada }}</td>
+                <td>{{ cliente.valor_minimo }}</td>
+                <td>{{ cliente.valor_minimo_congelado }}</td>
+                <td><span class="badge bg-success">Activo</span></td>
+                <td>{{ cliente.tramo_cobro }}</td>
+                <td>{{ cliente.tipo_cliente }}</td>
+                <td>{{ cliente.tipo_alcance }}</td>
+                <td>
+  <button class="btn btn-sm btn-warning editar-btn" 
+          data-id="{{ cliente.id }}"
+          data-nombre="{{ cliente.nombre }}"
+          data-rut="{{ cliente.rut }}"
+          data-correo="{{ cliente.correo }}"
+          data-telefono="{{ cliente.telefono }}"
+          data-direccion="{{ cliente.direccion }}"
+          data-pais="{{ cliente.pais }}"
+          data-ciudad="{{ cliente.ciudad }}"
+          data-region="{{ cliente.region }}"
+          data-codigo_postal="{{ cliente.codigo_postal }}"
+          data-tasa="{{ cliente.tasa }}"
+          data-tasa_congelada="{{ cliente.tasa_congelada }}"
+          data-valor_minimo="{{ cliente.valor_minimo }}"
+          data-valor_minimo_congelado="{{ cliente.valor_minimo_congelado }}"
+          data-tramo_cobro="{{ cliente.tramo_cobro }}"
+          data-tipo_cliente="{{ cliente.tipo_cliente }}"
+          data-tipo_alcance="{{ cliente.tipo_alcance }}"
+          data-bs-toggle="modal" data-bs-target="#modal-cliente">
+    Editar
+  </button>
+
+  <button class="btn btn-sm btn-danger eliminar-btn" 
+          data-id="{{ cliente.id }}">
+    Eliminar
+  </button>
+</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("form-cliente");
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const formData = new FormData(form);
+
+        fetch("{% url 'form_cliente' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": getCookie("csrftoken"),
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: formData
+        })
+        .then(async response => {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                return response.json();
+            } else {
+                const text = await response.text();
+                throw new Error("Respuesta inesperada del servidor:\n" + text);
+            }
+        })
+        .then(data => {
+            if (data.success) {
+                alert("Cliente guardado correctamente.");
+                location.reload();
+            } else {
+                document.getElementById("form-container").innerHTML = data.html;
+
+            }
+        })
+        .catch(err => {
+            console.error("Error:", err);
+            alert("Ocurrió un error al enviar el formulario. Revisa consola para más detalles.");
+        });
+    });
+
+    // Editar cliente: llenar modal
+    document.querySelectorAll('.editar-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            document.getElementById('cliente_id').value = this.dataset.id;
+            document.getElementById('nombre').value = this.dataset.nombre;
+            document.getElementById('rut').value = this.dataset.rut;
+            document.getElementById('correo').value = this.dataset.correo;
+            document.getElementById('telefono').value = this.dataset.telefono;
+            document.getElementById('direccion').value = this.dataset.direccion;
+            document.getElementById('pais').value = this.dataset.pais;
+            document.getElementById('ciudad').value = this.dataset.ciudad;
+            document.getElementById('region').value = this.dataset.region;
+            document.getElementById('codigo_postal').value = this.dataset.codigo_postal;
+            document.getElementById('tasa').value = this.dataset.tasa;
+            document.getElementById('tasa_congelada').value = this.dataset.tasa_congelada;
+            document.getElementById('valor_minimo').value = this.dataset.valor_minimo;
+            document.getElementById('valor_minimo_congelado').value = this.dataset.valor_minimo_congelado;
+            document.getElementById('tramo_cobro').value = this.dataset.tramo_cobro;
+            document.getElementById('tipo_empresa').checked = this.dataset.tipo_cliente === "empresa";
+            document.getElementById('tipo_persona').checked = this.dataset.tipo_cliente === "persona";
+            document.getElementById('minorista').checked = true;
+
+            document.getElementById('modalClienteLabel').textContent = "Editar Cliente";
+        });
+    });
+
+    // Eliminar cliente
+    document.querySelectorAll('.eliminar-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            const clienteId = this.dataset.id;
+            if (confirm("¿Estás seguro que deseas eliminar este cliente?")) {
+                fetch(`/clientes/${clienteId}/eliminar/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("Cliente eliminado correctamente.");
+                        location.reload();
+                    } else {
+                        alert("Error al eliminar cliente.");
+                    }
+                });
+            }
+        });
+    });
+
+    // CSRF helper
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+
+
+{% include 'core/modal_crear_cliente.html' %}
+{% endblock %}

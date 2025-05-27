@@ -1,0 +1,28 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+  <h4 class="mb-4">Resultado de Emisión de Factura</h4>
+
+  {% if resultado %}
+    {% if resultado.success %}
+      <div class="alert alert-success">
+        ✅ La factura fue emitida correctamente en Facturacion.cl
+      </div>
+    {% else %}
+      <div class="alert alert-danger">
+        ❌ Error al emitir la factura:<br>
+        <pre>{{ resultado.error }}</pre>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <a href="{% url 'factura_pdf' factura.pk %}" target="_blank" class="btn btn-primary">
+    Ver PDF de Factura
+  </a>
+  <a href="{% url 'crear_certificado' %}" class="btn btn-secondary">
+    Volver
+  </a>
+</div>
+{% endblock %}

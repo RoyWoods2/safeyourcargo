@@ -1,0 +1,50 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+    body { font-family: "Arial", sans-serif; font-size: 12px; margin: 0; padding: 0; color: #333; }
+    .container { padding: 20px; }
+    .logo { width: 200px; margin-bottom: 10px; }
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #aaa; padding-bottom: 5px; margin-bottom: 10px; }
+    h1 { font-size: 18px; margin: 0; color: #222; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #aaa; padding: 5px; }
+    th { background: #f0f0f0; font-weight: bold; text-align: left; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    .footer { margin-top: 20px; font-size: 10px; color: #666; text-align: center; border-top: 1px solid #ccc; padding-top: 5px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <div style="background: #333; padding: 5px; border-radius: 4px;">
+        <img src="{{ logo_path }}" class="logo" alt="Safe Logo">
+    </div>
+    <h1>Cobranza - Certificado C-{{ cobro.certificado.id }}</h1>
+</div>
+
+
+    <table>
+        <tr><th>Certificado</th><td>C-{{ cobro.certificado.id }}</td></tr>
+        <tr><th>Reseller</th><td>{{ cobro.certificado.cliente.nombre }}</td></tr>
+        <tr><th>Razón Social Asegurado</th><td>{{ cobro.certificado.cliente.nombre }}</td></tr>
+        <tr><th>Fecha Solicitud</th><td>{{ cobro.certificado.fecha_partida }}</td></tr>
+        <tr><th>Tipo Movimiento</th><td>{{ cobro.certificado.metodo_embarque.modo_transporte }}</td></tr>
+        <tr><th>Tipo Carga</th><td>{{ cobro.certificado.metodo_embarque.get_tipo_carga_display }}</td></tr>
+        <tr><th>Valor FCA</th><td>${{ cobro.valor_fca }}</td></tr>
+        <tr><th>Valor Flete</th><td>${{ cobro.valor_flete }}</td></tr>
+        <tr><th>Monto Asegurado</th><td>${{ cobro.monto_asegurado }}</td></tr>
+        <tr><th>Valor Prima Estimada</th><td>${{ cobro.valor_prima_estimado }}</td></tr>
+        <tr><th>Valor Prima Cobro</th><td>${{ cobro.valor_prima_cobro }}</td></tr>
+        <tr><th>Valor Prima Pagada</th><td>${{ cobro.valor_prima_pago }}</td></tr>
+        <tr><th>Fecha Cobro</th><td>{{ cobro.fecha_cobro|default:"-" }}</td></tr>
+        <tr><th>Estado</th><td>{{ cobro.get_estado_display }}</td></tr>
+    </table>
+
+    <div class="footer">
+        SafeYourCargo &copy; 2025 - Documento generado automáticamente
+    </div>
+</div>
+</body>
+</html>
