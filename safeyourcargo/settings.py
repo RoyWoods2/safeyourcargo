@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+load_dotenv()
 # BASE_DIR es la carpeta raíz del proyecto
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -65,7 +67,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'defaultdb',
         'USER': 'doadmin',
-        'PASSWORD': '',
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': 'db-postgresql-nyc1-56016-do-user-22829142-0.m.db.ondigitalocean.com',
         'PORT': '25060',
         'OPTIONS': {
