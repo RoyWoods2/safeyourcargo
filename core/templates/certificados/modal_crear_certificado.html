@@ -1,3 +1,4 @@
+{% load static %}
 <div class="modal fade" id="modal-certificado" tabindex="-1" aria-labelledby="modalCertificadoLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl">
     <div class="modal-content shadow">
@@ -81,22 +82,34 @@
           <div class="section-container">
             <span class="badge text-white">RUTA</span>
             <div class="row mb-3 mt-3">
+<div class="col-md-6">
+  <label class="form-label">País Origen</label>
+  <select id="paisOrigen" name="pais_origen" class="form-select">
+    <option value="">Seleccione un país</option>
+  </select>
+</div>
+
+<div class="col-md-6">
+  <label class="form-label">Ciudad Origen</label>
+  <select id="ciudadOrigen" name="ciudad_origen" class="form-select">
+    <option value="">Seleccione una ciudad</option>
+  </select>
+</div>
+
               <div class="col-md-6">
-                <label class="form-label">País Origen</label>
-                {{ ruta_form.pais_origen }}
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Ciudad Origen</label>
-                {{ ruta_form.ciudad_origen }}
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">País Destino</label>
-                {{ ruta_form.pais_destino }}
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Ciudad Destino</label>
-                {{ ruta_form.ciudad_destino }}
-              </div>
+  <label class="form-label">País Destino</label>
+  <select id="paisDestino" name="pais_destino" class="form-select">
+    <option value="">Seleccione un país</option>
+  </select>
+</div>
+
+<div class="col-md-6">
+  <label class="form-label">Ciudad Destino</label>
+  <select id="ciudadDestino" name="ciudad_destino" class="form-select">
+    <option value="">Seleccione una ciudad</option>
+  </select>
+</div>
+
             </div>
           </div>
 <!-- EMBARQUE -->
@@ -261,10 +274,36 @@
   <label class="form-label" id="label_numero_viaje">N° Viaje / Vuelo</label>
   {{ viaje_form.numero_viaje }}
 </div>
-              <div class="col-md-6"><label class="form-label">País Origen</label>{{ viaje_form.vuelo_origen_pais }}</div>
-              <div class="col-md-6"><label class="form-label">Ciudad Origen</label>{{ viaje_form.vuelo_origen_ciudad }}</div>
-              <div class="col-md-6"><label class="form-label">País Destino</label>{{ viaje_form.vuelo_destino_pais }}</div>
-              <div class="col-md-6"><label class="form-label">Ciudad Destino</label>{{ viaje_form.vuelo_destino_ciudad }}</div>
+<div class="col-md-6">
+  <label class="form-label">País Origen</label>
+  <select id="vueloOrigenPais" name="vuelo_origen_pais" class="form-select">
+    <option value="">Seleccione un país</option>
+  </select>
+</div>
+
+<div class="col-md-6">
+  <label class="form-label">Ciudad Origen</label>
+  <select id="vueloOrigenCiudad" name="vuelo_origen_ciudad" class="form-select">
+    <option value="">Seleccione una ciudad</option>
+  </select>
+</div>
+
+<div class="col-md-6">
+  <label class="form-label">País Destino</label>
+  <select id="vueloDestinoPais" name="vuelo_destino_pais" class="form-select">
+    <option value="">Seleccione un país</option>
+  </select>
+</div>
+
+<div class="col-md-6">
+  <label class="form-label">Ciudad Destino</label>
+  <select id="vueloDestinoCiudad" name="vuelo_destino_ciudad" class="form-select">
+    <option value="">Seleccione una ciudad</option>
+  </select>
+</div>
+
+
+              
 <div class="col-md-6" id="grupo_aeropuerto_origen">
   <label class="form-label" id="label_aeropuerto_origen">Aeropuerto Origen</label>
   {{ viaje_form.aeropuerto_origen }}
@@ -458,3 +497,6 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+
+
+<script src="{% static 'js/formulario_viaje.js' %}"></script>

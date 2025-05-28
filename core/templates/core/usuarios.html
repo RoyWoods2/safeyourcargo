@@ -61,43 +61,48 @@
                 <th>USERNAME</th>
                 <th>ROL</th>
                 <th>CLIENTE</th>
-                <th>ACCIONES</th>
+    {% if request.user.is_superuser or request.user.rol == "Administrador" %}
+    <th>ACCIONES</th>
+    {% endif %}
               </tr>
             </thead>
             <tbody>
-  {% for usuario in usuarios %}
-  <tr>
-    <td>
-      <span class="badge {% if usuario.is_active %}bg-success{% else %}bg-danger{% endif %} estado-label">
-        {% if usuario.is_active %}Activo{% else %}Inactivo{% endif %}
-      </span>
-    </td>
-    <td>{{ usuario.username }}</td>
-    <td>{{ usuario.rol }}</td>
-    <td>{{ usuario.cliente.nombre }}</td>
-    <td>
-      <button type="button" class="btn btn-outline-secondary btn-sm mt-1 editar-usuario"
-              data-id="{{ usuario.id }}"
-              data-username="{{ usuario.username }}"
-              data-rol="{{ usuario.rol }}"
-              data-cliente="{{ usuario.cliente.id }}">
-        Editar
-      </button>
+{% for usuario in usuarios %}
+<tr>
+  <td>
+    <span class="badge {% if usuario.is_active %}bg-success{% else %}bg-danger{% endif %} estado-label">
+      {% if usuario.is_active %}Activo{% else %}Inactivo{% endif %}
+    </span>
+  </td>
+  <td>{{ usuario.username }}</td>
+  <td>{{ usuario.rol }}</td>
+  <td>{{ usuario.cliente.nombre }}</td>
+  {% if request.user.is_superuser or request.user.rol == "Administrador" %}
+  <td>
+    <button type="button" class="btn btn-outline-secondary btn-sm mt-1 editar-usuario"
+            data-id="{{ usuario.id }}"
+            data-username="{{ usuario.username }}"
+            data-rol="{{ usuario.rol }}"
+            data-cliente="{{ usuario.cliente.id }}">
+      Editar
+    </button>
 
-      <button type="button"
-              class="btn btn-outline-secondary btn-sm mt-1 toggle-estado-btn"
-              data-id="{{ usuario.id }}"
-              data-estado="{{ usuario.is_active }}">
-        {% if usuario.is_active %}Desactivar{% else %}Activar{% endif %}
-      </button>
-    </td>
-  </tr>
-  {% empty %}
-  <tr>
-    <td colspan="5" class="text-center text-muted">No hay usuarios registrados aún.</td>
-  </tr>
-  {% endfor %}
+    <button type="button"
+            class="btn btn-outline-secondary btn-sm mt-1 toggle-estado-btn"
+            data-id="{{ usuario.id }}"
+            data-estado="{{ usuario.is_active }}">
+      {% if usuario.is_active %}Desactivar{% else %}Activar{% endif %}
+    </button>
+  </td>
+  {% endif %}
+</tr>
+{% empty %}
+<tr>
+  <td colspan="5" class="text-center text-muted">No hay usuarios registrados aún.</td>
+</tr>
+{% endfor %}
 </tbody>
+
 
           </table>
         </div>

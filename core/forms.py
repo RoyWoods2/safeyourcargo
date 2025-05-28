@@ -10,7 +10,7 @@ class ClienteForm(forms.ModelForm):
         model = Cliente
         fields = [
             'tipo_cliente', 'nombre', 'rut', 'correo', 'telefono', 'direccion',
-            'pais', 'ciudad', 'region', 'codigo_postal',
+            'pais', 'ciudad', 'region',
             'tasa', 'valor_minimo', 'tasa_congelada', 'valor_minimo_congelado',
             'tramo_cobro', 'tipo_alcance'
         ]
@@ -147,6 +147,15 @@ class TipoMercanciaForm(forms.ModelForm):
             'valor_prima': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
         }
 class ViajeForm(forms.ModelForm):
+    aeropuerto_origen = forms.CharField(
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_aeropuerto_origen'})
+    )
+    aeropuerto_destino = forms.CharField(
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_aeropuerto_destino'})
+    )
+
     class Meta:
         model = Viaje
         fields = '__all__'
@@ -155,12 +164,24 @@ class ViajeForm(forms.ModelForm):
             'numero_viaje': forms.TextInput(attrs={'class': 'form-control'}),
             'vuelo_origen_pais': forms.TextInput(attrs={'class': 'form-control'}),
             'vuelo_origen_ciudad': forms.TextInput(attrs={'class': 'form-control'}),
-            'aeropuerto_origen': forms.TextInput(attrs={'class': 'form-control'}),
             'vuelo_destino_pais': forms.TextInput(attrs={'class': 'form-control'}),
             'vuelo_destino_ciudad': forms.TextInput(attrs={'class': 'form-control'}),
-            'aeropuerto_destino': forms.TextInput(attrs={'class': 'form-control'}),
             'descripcion_carga': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Si hay datos POST, asignar las opciones directamente
+        if self.data.get("aeropuerto_origen"):
+            self.fields['aeropuerto_origen'].widget.choices = [
+                (self.data.get("aeropuerto_origen"), self.data.get("aeropuerto_origen"))
+            ]
+
+        if self.data.get("aeropuerto_destino"):
+            self.fields['aeropuerto_destino'].widget.choices = [
+                (self.data.get("aeropuerto_destino"), self.data.get("aeropuerto_destino"))
+            ]
 
 class NotasNumerosForm(forms.ModelForm):
     class Meta:

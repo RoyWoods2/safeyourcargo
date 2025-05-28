@@ -35,7 +35,6 @@ class Cliente(models.Model):
     pais = models.CharField(max_length=100)
     ciudad = models.CharField(max_length=100)
     region = models.CharField(max_length=100)
-    codigo_postal = models.CharField(max_length=20)
 
     tasa = models.DecimalField(max_digits=10, decimal_places=3)
     valor_minimo = models.DecimalField(max_digits=10, decimal_places=3)

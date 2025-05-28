@@ -70,7 +70,8 @@
               </div>
               <div class="col-md-6">
                 <label for="rut" class="form-label">RUT</label>
-                <input type="text" class="form-control" id="rut" name="rut" required>
+                <input type="text" class="form-control" id="rut" name="rut" placeholder="Ingrese el RUT" maxlength="12" />
+
               </div>
             </div>
             <div class="row mb-3">
@@ -106,10 +107,7 @@
                 <label for="region" class="form-label">Región</label>
                 <input type="text" id="region" name="region" class="form-control" required>
               </div>
-              <div class="col-md-4 mt-3">
-                <label for="codigo_postal" class="form-label">Código Postal</label>
-                <input type="text" class="form-control" id="codigo_postal" name="codigo_postal" required>
-              </div>
+              
             </div>
           </div>
 
@@ -172,26 +170,6 @@
 </div>
 
 <script>
-fetch("{% static 'js/paises_ciudades.json' %}")
-  .then(res => res.json())
-  .then(data => {
-    const paisSelect = document.getElementById("pais");
-    const ciudadSelect = document.getElementById("ciudad");
-
-    paisSelect.innerHTML = '<option value="">Selecciona un país</option>';
-    Object.keys(data).sort().forEach(pais => {
-      paisSelect.innerHTML += `<option value="${pais}">${pais}</option>`;
-    });
-
-    paisSelect.addEventListener("change", function () {
-      const ciudades = data[this.value] || [];
-      ciudadSelect.innerHTML = '<option value="">Selecciona una ciudad</option>';
-      ciudades.forEach(ciudad => {
-        ciudadSelect.innerHTML += `<option value="${ciudad}">${ciudad}</option>`;
-      });
-    });
-  });
-
 function getCookie(name) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
@@ -231,4 +209,34 @@ document.getElementById("form-cliente").addEventListener("submit", function (e) 
       console.error("Error al enviar formulario:", err);
     });
 });
+</script>
+
+<script>
+  document.getElementById('rut').addEventListener('input', function(e) {
+    // Eliminar cualquier carácter que no sea número o K/k
+    let rut = e.target.value.replace(/[^0-9kK]/g, '').toUpperCase();
+
+    // Separar el dígito verificador
+    let cuerpo = rut.slice(0, -1);
+    let dv = rut.slice(-1);
+
+    // Formatear el cuerpo con puntos como miles
+    let cuerpoFormateado = '';
+    let cont = 0;
+
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+      cuerpoFormateado = cuerpo[i] + cuerpoFormateado;
+      cont++;
+      if (cont % 3 === 0 && i !== 0) {
+        cuerpoFormateado = '.' + cuerpoFormateado;
+      }
+    }
+
+    // Combinar el cuerpo con el dígito verificador (si existe)
+    if (rut.length > 1) {
+      e.target.value = `${cuerpoFormateado}-${dv}`;
+    } else {
+      e.target.value = rut;
+    }
+  });
 </script>

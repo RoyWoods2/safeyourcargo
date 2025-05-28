@@ -16,6 +16,7 @@ import requests
 from django.utils.formats import date_format
 from num2words import num2words
 from core.services.facturacion_cl import emitir_boleta_facturacion_cl
+from core.services.unlocode_utils import get_ports_by_country,get_airports_by_country,pais_a_codigo # 🔹 IMPORTA AQUÍ
 import logging
 import tempfile
 import io
@@ -26,10 +27,10 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.db.models import Count
-
+from django.views.decorators.csrf import csrf_exempt
 logger = logging.getLogger(__name__)
 from django.contrib.auth import get_user_model
-
+import json
 Usuario = get_user_model()
 
 @login_required
@@ -448,10 +449,12 @@ def generar_pdf_cobranza(request, certificado_id):
 
     # Ruta absoluta del logo para WeasyPrint
     logo_path = os.path.join(settings.BASE_DIR, 'core', 'static', 'img', 'safe_logo.png')
-
+    logo_fixed = logo_path.replace("\\", "/")
     html_string = render_to_string('core/pdf_cobranza.html', {
         'cobro': cobro,
-        'logo_path': f'file:///{logo_path.replace("\\", "/")}',
+        
+        'logo_path': f'file:///{logo_fixed}',
+
     })
 
     pdf_file = io.BytesIO()
@@ -460,3 +463,116 @@ def generar_pdf_cobranza(request, certificado_id):
     response = HttpResponse(pdf_file.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename=cobranza_C{cobro.certificado.id}.pdf'
     return response
+
+def obtener_paises(request):
+    response = requests.get("https://restcountries.com/v3.1/all")
+    if response.ok:
+        data = response.json()
+        paises = sorted([{
+            "nombre": c["name"]["common"],
+            "codigo": c["cca2"],
+            "bandera": c["flags"]["svg"]
+        } for c in data], key=lambda x: x["nombre"])
+        return JsonResponse({"paises": paises})
+    return JsonResponse({"error": "No se pudieron obtener los países"}, status=500)
+
+
+@csrf_exempt
+def obtener_ciudades(request):
+    if request.method == "POST":
+        import json
+        datos = json.loads(request.body)
+        pais = datos.get("pais")
+
+        # 👉 La API externa espera GET, no POST
+        response = requests.get(
+            f"https://countriesnow.space/api/v0.1/countries/cities/q?country={pais}"
+        )
+
+        if response.ok:
+            data = response.json()
+            return JsonResponse({"ciudades": data.get("data", [])})
+        return JsonResponse({"error": "No se pudieron obtener las ciudades"}, status=500)
+    
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+@csrf_exempt
+def obtener_aeropuertos(request):
+    if request.method == "POST":
+        try:
+            datos = json.loads(request.body)
+            pais = datos.get("pais")
+            print(f"📡 Recibido país: {pais}")
+            aeropuertos = get_airports_by_country(pais)
+            print(f"✅ Aeropuertos encontrados: {len(aeropuertos)}")
+            return JsonResponse({"aeropuertos": aeropuertos})
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+
+def obtener_paises(request):
+    response = requests.get("https://restcountries.com/v3.1/all")
+    if response.ok:
+        data = response.json()
+        paises = sorted([{
+            "nombre": c["name"]["common"],
+            "codigo": c["cca2"],
+            "bandera": c["flags"]["svg"]
+        } for c in data], key=lambda x: x["nombre"])
+        return JsonResponse({"paises": paises})
+    return JsonResponse({"error": "No se pudieron obtener los países"}, status=500)
+
+
+@csrf_exempt
+def obtener_ciudades(request):
+    if request.method == "POST":
+        import json
+        datos = json.loads(request.body)
+        pais = datos.get("pais")
+
+        # 👉 La API externa espera GET, no POST
+        response = requests.get(
+            f"https://countriesnow.space/api/v0.1/countries/cities/q?country={pais}"
+        )
+
+        if response.ok:
+            data = response.json()
+            return JsonResponse({"ciudades": data.get("data", [])})
+        return JsonResponse({"error": "No se pudieron obtener las ciudades"}, status=500)
+    
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+@csrf_exempt
+def obtener_aeropuertos(request):
+    if request.method == "POST":
+        try:
+            datos = json.loads(request.body)
+            pais = datos.get("pais")
+            print(f"📡 Recibido país: {pais}")
+            aeropuertos = get_airports_by_country(pais)
+            print(f"✅ Aeropuertos encontrados: {len(aeropuertos)}")
+            return JsonResponse({"aeropuertos": aeropuertos})
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+
+@csrf_exempt
+def obtener_unlocode(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            pais = data.get("pais")
+            funcion = data.get("function", "1")
+
+            if not pais:
+                return JsonResponse({"error": "País no proporcionado"}, status=400)
+
+            ubicaciones = get_ports_by_country(pais, funcion)
+            return JsonResponse({"ubicaciones": ubicaciones})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+
+
+

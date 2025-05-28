@@ -246,5 +246,146 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const paisSelect = $("#pais");
+  const ciudadSelect = $("#ciudad");
+  const regionInput = document.getElementById("region");
+  const rutInput = document.getElementById("rut");
+  const formCliente = document.getElementById("form-cliente");
+
+  // ⚡ Cargar países apenas cargue la página
+  function cargarPaises() {
+    paisSelect.empty().append('<option></option>');
+    fetch("/api/paises/")
+      .then(res => res.json())
+      .then(data => {
+        console.log("Respuesta /api/paises/:", data);
+        if (data.paises && data.paises.length > 0) {
+          data.paises.forEach(pais => {
+            const option = new Option(pais.nombre, pais.nombre, false, false);
+            paisSelect.append(option);
+          });
+        }
+      })
+      .catch(err => console.error("Error cargando países:", err));
+  }
+
+  cargarPaises(); // 🔥 Lo cargamos de una vez
+
+  // ⚡ Cuando abras el modal: forzar Select2 a "refrescarse"
+  $("#modal-cliente").on("shown.bs.modal", function () {
+    // 👉 Destruir select2 para forzar refresco de las opciones
+    if (paisSelect.hasClass("select2-hidden-accessible")) {
+      paisSelect.select2("destroy");
+    }
+    if (ciudadSelect.hasClass("select2-hidden-accessible")) {
+      ciudadSelect.select2("destroy");
+    }
+
+  
+    // 👉 Resetear ciudad y región
+    ciudadSelect.empty().append('<option></option>').trigger("change.select2");
+    regionInput.value = "";
+  });
+
+  // 🔥 Al seleccionar país, cargar ciudades
+  paisSelect.on("change", function () {
+    const paisNombre = $(this).val();
+    ciudadSelect.empty().append('<option>Cargando...</option>').trigger("change.select2");
+    regionInput.value = "";
+
+    if (paisNombre) {
+      fetch("/api/ciudades/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pais: paisNombre })
+      })
+        .then(res => res.json())
+        .then(data => {
+          ciudadSelect.empty().append('<option></option>');
+          if (data.ciudades && data.ciudades.length > 0) {
+            data.ciudades.forEach(ciudad => {
+              const option = new Option(ciudad, ciudad, false, false);
+              ciudadSelect.append(option);
+            });
+          } else {
+            ciudadSelect.append('<option value="">Sin ciudades disponibles</option>');
+          }
+          ciudadSelect.trigger("change.select2");
+        })
+        .catch(err => {
+          console.error("Error cargando ciudades:", err);
+          ciudadSelect.empty().append('<option value="">Error al cargar</option>').trigger("change.select2");
+        });
+    } else {
+      ciudadSelect.empty().append('<option value="">Selecciona un país primero</option>').trigger("change.select2");
+    }
+  });
+
+  // 📝 Formateo dinámico del RUT
+  rutInput.addEventListener('input', function (e) {
+    let rut = e.target.value.replace(/[^0-9kK]/g, '').toUpperCase();
+    let cuerpo = rut.slice(0, -1);
+    let dv = rut.slice(-1);
+    let cuerpoFormateado = '';
+    let cont = 0;
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+      cuerpoFormateado = cuerpo[i] + cuerpoFormateado;
+      cont++;
+      if (cont % 3 === 0 && i !== 0) {
+        cuerpoFormateado = '.' + cuerpoFormateado;
+      }
+    }
+    e.target.value = rut.length > 1 ? `${cuerpoFormateado}-${dv}` : rut;
+  });
+
+  // 📝 CSRF helper
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  // 📝 Enviar formulario
+  formCliente.addEventListener("submit", function (e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    fetch("{% url 'form_cliente' %}", {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": getCookie("csrftoken"),
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: formData
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          location.reload();
+        } else {
+          alert("Error al guardar cliente.");
+        }
+      })
+      .catch(err => {
+        console.error("Error al enviar formulario:", err);
+      });
+  });
+});
+</script>
+
+
+
 {% include 'core/modal_crear_cliente.html' %}
 {% endblock %}

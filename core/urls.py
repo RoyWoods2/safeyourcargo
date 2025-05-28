@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-
+from django.contrib.auth.views import LogoutView
 urlpatterns = [
     path('', views.home_redirect, name='home'),
     path('clientes/', views.lista_clientes, name='clientes'),
@@ -20,4 +20,9 @@ urlpatterns = [
     path('cobranzas/pdf/<int:certificado_id>/', views.generar_pdf_cobranza, name='generar_pdf_cobranza'),
     path('login/', views.login_view, name='login'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
+    path('api/paises/', views.obtener_paises, name='api_paises'),
+    path('api/ciudades/', views.obtener_ciudades, name='api_ciudades'),
+    path('api/aeropuertos/', views.obtener_aeropuertos, name='api_aeropuertos'),
+    path('api/unlocode/', views.obtener_unlocode, name='api_unlocode'),
 ]
