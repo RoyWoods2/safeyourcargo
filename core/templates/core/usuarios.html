@@ -158,17 +158,25 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // EDITAR USUARIO
-  tabla.querySelectorAll(".editar-usuario").forEach(button => {
-    button.addEventListener("click", function () {
-      document.getElementById("usuario_id").value = this.dataset.id;
-      document.getElementById("username").value = this.dataset.username;
-      document.getElementById("password").value = "";
-      document.getElementById("role").value = this.dataset.rol;
-      document.getElementById("cliente").value = this.dataset.cliente;
-      document.getElementById("modalUsuarioLabel").textContent = "Editar Usuario";
-      new bootstrap.Modal(document.getElementById("modal-usuario")).show();
-    });
+tabla.querySelectorAll(".editar-usuario").forEach(button => {
+  button.addEventListener("click", function () {
+    const usuarioId = this.dataset.id;
+    const username = this.dataset.username;
+    const rol = this.dataset.rol;  // ← ahora sí está definida
+    const clienteId = this.dataset.cliente;
+
+    cargarOpcionesRol(rol);  // ← ya no lanzará error
+
+    document.getElementById("usuario_id").value = usuarioId;
+    document.getElementById("username").value = username;
+    document.getElementById("password").value = "";
+    document.getElementById("cliente").value = clienteId;
+
+    document.getElementById("modalUsuarioLabel").textContent = "Editar Usuario";
+    new bootstrap.Modal(document.getElementById("modal-usuario")).show();
   });
+});
+
 
   // CSRF
   function getCookie(name) {
@@ -226,6 +234,31 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
 });
+function cargarOpcionesRol(rolActual) {
+  const rolSelect = document.getElementById("role");
+  if (!rolSelect) return;
+
+  rolSelect.innerHTML = "";  // Limpia
+
+  const usuarioActualRol = "{{ rol_actual }}";
+
+  let opciones = [];
+  if (usuarioActualRol === "Superusuario") {
+    opciones = ["Usuario", "Administrador", "Revendedor"];
+  } else {
+    opciones = ["Revendedor"];
+  }
+
+  opciones.forEach(opcion => {
+    const opt = document.createElement("option");
+    opt.value = opcion;
+    opt.textContent = opcion;
+    if (opcion === rolActual) {
+      opt.selected = true;
+    }
+    rolSelect.appendChild(opt);
+  });
+}
 </script>
 
 {% endblock %}

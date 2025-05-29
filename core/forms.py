@@ -25,32 +25,32 @@ class ClienteForm(forms.ModelForm):
 
 class UsuarioForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput, required=True)
-    role = forms.ChoiceField(
-        choices=[('Administrador', 'Administrador'), ('Usuario', 'Usuario')],
-        required=True,
-        label="Rol"
-    )
-    cliente = forms.ModelChoiceField(
-        queryset=Cliente.objects.all(),
-        required=True,
-        label="Razón Social Cliente"
-    )
 
     class Meta:
-        model = User
-        fields = ['username', 'password']
+        model = Usuario
+        fields = ['username', 'password', 'rol', 'cliente']
 
     def clean_username(self):
         username = self.cleaned_data['username']
         if self.instance.pk is None:
-        # Solo valida duplicados si es nuevo
-            if User.objects.filter(username=username).exists():
+            if Usuario.objects.filter(username=username).exists():
                 raise forms.ValidationError("Este nombre de usuario ya está en uso.")
         else:
-        # Si está editando, valida duplicados en otros usuarios
-            if User.objects.exclude(pk=self.instance.pk).filter(username=username).exists():
+            if Usuario.objects.exclude(pk=self.instance.pk).filter(username=username).exists():
                 raise forms.ValidationError("Ya existe otro usuario con este nombre.")
         return username
+
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if self.instance.pk is None:
+            if Usuario.objects.filter(username=username).exists():
+                raise forms.ValidationError("Este nombre de usuario ya está en uso.")
+        else:
+            if Usuario.objects.exclude(pk=self.instance.pk).filter(username=username).exists():
+                raise forms.ValidationError("Ya existe otro usuario con este nombre.")
+        return username
+
 
 class CertificadoTransporteForm(forms.ModelForm):
     class Meta:

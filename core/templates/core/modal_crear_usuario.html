@@ -73,7 +73,8 @@
             <div class="row mb-3">
               <div class="col-md-6">
                 <label for="role" class="form-label">Rol</label>
-                <select class="form-select" id="role" name="role" required>
+<select class="form-select" id="role" name="rol" required>
+
                   <!-- Opciones dinámicas en JS -->
                 </select>
               </div>
@@ -132,21 +133,39 @@ function getCookie(name) {
 // Configura dinámicamente el <select> de rol según el rol del usuario actual
 document.querySelectorAll('[data-bs-target="#modal-usuario"]').forEach(button => {
   button.addEventListener("click", function () {
-    const rolSelect = document.getElementById("role");
-    const usuarioActualRol = "{{ rol_actual }}";
+  const usuarioId = this.dataset.id;
+  const username = this.dataset.username;
+  const rol = this.dataset.rol;
+  const clienteId = this.dataset.cliente;
 
-    // Limpiar opciones
-    rolSelect.innerHTML = "";
+  const rolSelect = document.getElementById("rol");
+  
+  // Limpiar y cargar las opciones según el rol actual
+  rolSelect.innerHTML = "";  // limpia el select
 
-    if (usuarioActualRol === "Superusuario") {
-      rolSelect.innerHTML = `
-        <option value="Usuario">Usuario</option>
-        <option value="Administrador">Administrador</option>
-        <option value="Revendedor">Revendedor</option>`;
-    } else {
-      rolSelect.innerHTML = `<option value="Revendedor" selected>Revendedor</option>`;
-    }
-  });
+  const usuarioActualRol = "{{ rol_actual }}";
+  if (usuarioActualRol === "Superusuario") {
+    rolSelect.innerHTML = `
+      <option value="Usuario">Usuario</option>
+      <option value="Administrador">Administrador</option>
+      <option value="Revendedor">Revendedor</option>`;
+  } else {
+    rolSelect.innerHTML = `<option value="Revendedor">Revendedor</option>`;
+  }
+
+  // Ahora sí, asigna el valor del rol
+  rolSelect.value = rol;
+
+  // Asignar resto de valores
+  cargarOpcionesRol(""); // sin preselección
+  document.getElementById("usuario_id").value = usuarioId;
+  document.getElementById("username").value = username;
+  document.getElementById("password").value = "";
+  document.getElementById("cliente").value = clienteId;
+
+  document.getElementById("modalUsuarioLabel").textContent = "Editar Usuario";
+  new bootstrap.Modal(document.getElementById("modal-usuario")).show();
+});
 });
 
 document.getElementById("btn-guardar-usuario").addEventListener("click", function () {
@@ -181,4 +200,6 @@ document.getElementById("btn-guardar-usuario").addEventListener("click", functio
       alert("Ocurrió un error inesperado. Revisa consola.");
     });
 });
+
+
 </script>

@@ -174,7 +174,7 @@ def form_usuario(request):
     usuario_id = request.POST.get("usuario_id")
     username = request.POST.get("username")
     password = request.POST.get("password")
-    rol = request.POST.get("role")
+    rol = request.POST.get("rol")
     cliente_id = request.POST.get("cliente")
 
     if usuario_id:
