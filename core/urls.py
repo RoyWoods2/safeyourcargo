@@ -12,6 +12,7 @@ urlpatterns = [
     path('usuarios/form/', views.form_usuario, name='form_usuario'),
     path('usuarios/eliminar/<int:pk>/', views.eliminar_usuario, name='eliminar_usuario'),
     path('usuarios/toggle-estado/<int:pk>/', views.toggle_estado_usuario, name='toggle_estado_usuario'),
+    path('usuarios/obtener-datos-modal-usuario/', views.obtener_datos_modal_usuario, name='obtener_datos_modal_usuario'),
     path('certificados/', views.crear_certificado, name='crear_certificado'),
     path('certificados/<int:pk>/pdf/', views.certificado_pdf, name='certificado_pdf'),
     path('certificados/<int:pk>/factura/', views.factura_pdf, name='factura_pdf'),
@@ -25,4 +26,5 @@ urlpatterns = [
     path('api/ciudades/', views.obtener_ciudades, name='api_ciudades'),
     path('api/aeropuertos/', views.obtener_aeropuertos, name='api_aeropuertos'),
     path('api/unlocode/', views.obtener_unlocode, name='api_unlocode'),
+    path("logs-actividad/", views.obtener_logs_actividad, name="logs_actividad"),
 ]

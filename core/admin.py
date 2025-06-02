@@ -106,3 +106,11 @@ class CobranzaAdmin(admin.ModelAdmin):
     )
     list_filter = ('estado', 'fecha_cobro')
     search_fields = ('certificado__id', 'certificado__cliente__nombre')
+    
+    
+
+@admin.register(LogActividad)
+class LogActividadAdmin(admin.ModelAdmin):
+    list_display = ('usuario', 'mensaje', 'fecha')
+    search_fields = ('usuario__username', 'mensaje')
+    list_filter = ('usuario', 'fecha')

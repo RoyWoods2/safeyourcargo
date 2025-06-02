@@ -1,7 +1,7 @@
 # views.py
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
-from .models import Cliente,Ciudad, CertificadoTransporte, Factura, Cobranza, Usuario  
+from .models import Cliente,Ciudad, CertificadoTransporte, Factura, Cobranza, Usuario, LogActividad  
 from .forms import *
 from django.views.decorators.http import require_POST
 from django.contrib.auth.hashers import make_password
@@ -31,6 +31,8 @@ from django.views.decorators.csrf import csrf_exempt
 logger = logging.getLogger(__name__)
 from django.contrib.auth import get_user_model
 import json
+from django.db.models import Q
+from .utils import registrar_actividad
 Usuario = get_user_model()
 
 @login_required
@@ -77,7 +79,20 @@ def login_view(request):
     return render(request, 'core/login.html')
 @login_required
 def lista_clientes(request):
-    clientes = Cliente.objects.all()
+    if request.user.is_superuser:
+        clientes = Cliente.objects.all()
+    else:
+        if request.user.rol == 'Administrador':
+            # Clientes creados por él o por sus revendedores
+            revendedores = Usuario.objects.filter(creado_por=request.user)
+            clientes = Cliente.objects.filter(
+                models.Q(creado_por=request.user) |
+                models.Q(creado_por__in=revendedores)
+            )
+        else:
+            # Solo los clientes que él mismo creó
+            clientes = Cliente.objects.filter(creado_por=request.user)
+
     return render(request, 'core/clientes.html', {'clientes': clientes})
 
 @login_required
@@ -96,10 +111,14 @@ def form_cliente(request):
         form = ClienteForm(request.POST)
 
     if form.is_valid():
-        form.save()
+        cliente = form.save()
+        # 🔥 Registrar actividad
+        if cliente_id:
+            registrar_actividad(request.user, f"Editó cliente: {cliente.nombre}")
+        else:
+            registrar_actividad(request.user, f"Creó cliente: {cliente.nombre}")
         return JsonResponse({'success': True})
     else:
-        # Si deseas mostrar errores específicos, puedes devolverlos aquí
         return JsonResponse({
             'success': False,
             'errors': form.errors
@@ -113,6 +132,8 @@ def editar_cliente(request, pk):
         form = ClienteForm(request.POST, instance=cliente)
         if form.is_valid():
             cliente = form.save()
+            # 🔥 Registrar actividad
+            registrar_actividad(request.user, f"Editó cliente: {cliente.nombre}")
             return JsonResponse({
                 'success': True,
                 'cliente': {
@@ -132,13 +153,18 @@ def editar_cliente(request, pk):
         return render(request, 'core/form_cliente.html', {'form': form})
 
 @require_POST
+@login_required
 def eliminar_cliente(request, pk):
     try:
         cliente = Cliente.objects.get(pk=pk)
+        nombre_cliente = cliente.nombre
         cliente.delete()
+        # 🔥 Registrar actividad
+        registrar_actividad(request.user, f"Eliminó cliente: {nombre_cliente}")
         return JsonResponse({'success': True})
     except Cliente.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Cliente no encontrado'}, status=404)
+
 def obtener_ciudades(request):
     pais_id = request.GET.get('pais_id')
     ciudades = Ciudad.objects.filter(pais_id=pais_id).values('id', 'nombre')
@@ -148,21 +174,32 @@ def obtener_ciudades(request):
 
 @login_required
 def lista_usuarios(request):
-    # Excluye superusuarios de la lista
-    usuarios = Usuario.objects.filter(is_superuser=False).select_related('cliente')
-    clientes = Cliente.objects.all()
-
-    if request.user.is_authenticated:
-        rol_actual = "Superusuario" if request.user.is_superuser else request.user.rol
+    if request.user.is_superuser:
+        usuarios = Usuario.objects.filter(is_superuser=False).select_related('cliente')
+        clientes = Cliente.objects.all()
+    elif request.user.rol == "Administrador":
+        # Ver los suyos y los de sus revendedores
+        usuarios_subordinados = Usuario.objects.filter(cliente=request.user.cliente, rol="Revendedor")
+        usuarios = Usuario.objects.filter(
+            cliente__in=[request.user.cliente] + list(usuarios_subordinados.values_list('cliente', flat=True)),
+            is_superuser=False
+        ).select_related('cliente')
+        clientes = Cliente.objects.filter(id__in=[request.user.cliente.id] + list(usuarios_subordinados.values_list('cliente', flat=True)))
+    elif request.user.rol == "Revendedor":
+        # 🔹 Solo ve usuarios que él creó
+        usuarios = Usuario.objects.filter(cliente=request.user.cliente, is_superuser=False).select_related('cliente')
+        clientes = Cliente.objects.filter(id=request.user.cliente.id)
     else:
-        rol_actual = "Anónimo"
+        usuarios = Usuario.objects.none()
+        clientes = Cliente.objects.none()
+
+    rol_actual = "Superusuario" if request.user.is_superuser else request.user.rol
 
     return render(request, 'core/usuarios.html', {
         'usuarios': usuarios,
         'clientes': clientes,
         'rol_actual': rol_actual,
     })
-
 
 
 @require_POST
@@ -186,10 +223,13 @@ def form_usuario(request):
         usuario = Usuario(username=username)
         usuario.set_password(password or "123456")  # Contraseña por defecto
 
+    # 🔹 Lógica de permisos y asignación de roles
     if request.user.is_superuser:
         usuario.rol = rol
-    elif hasattr(request.user, "rol") and request.user.rol == "Administrador":
+    elif request.user.rol == "Administrador":
         usuario.rol = "Revendedor"
+    elif request.user.rol == "Revendedor":
+        usuario.rol = "Usuario"  # 🔥 El revendedor solo puede crear usuarios normales
     else:
         return JsonResponse({'success': False, 'error': 'No tienes permiso para crear usuarios.'}, status=403)
 
@@ -197,7 +237,7 @@ def form_usuario(request):
     usuario.pendiente_aprobacion = False
     usuario.cliente_id = cliente_id
     usuario.save()
-
+    
     return JsonResponse({'success': True})
 
 def register(request):
@@ -238,14 +278,14 @@ def aprobar_usuario(request, user_id):
     usuario.is_active = True
     usuario.pendiente_aprobacion = False
     usuario.save()
-
+    registrar_actividad(request.user, f"Aprobó al usuario: {usuario.username}")
     send_mail(
         "Tu cuenta fue aprobada",
         f"Hola {usuario.username}, tu cuenta ha sido aprobada. ¡Ya puedes acceder!",
         settings.DEFAULT_FROM_EMAIL,
         [usuario.email]
     )
-
+    
     return JsonResponse({'success': True, 'mensaje': 'Usuario aprobado y notificado.'})
 
 
@@ -272,6 +312,10 @@ def toggle_estado_usuario(request, pk):
         user = Usuario.objects.get(pk=pk)
         user.is_active = not user.is_active
         user.save()
+        estado = "activado" if user.is_active else "desactivado"
+        registrar_actividad(request.user, f"Cambió estado de usuario: {user.username} a {estado}")
+
+        
         return JsonResponse({
             'success': True,
             'estado': user.is_active,
@@ -312,7 +356,7 @@ def crear_certificado(request):
             certificado.viaje = viaje
             certificado.notas = notas
             certificado.save()
-
+            registrar_actividad(request.user, f"Creó certificado: C-{certificado.id}")
             # 🔹 Crear la factura automáticamente
             from decimal import Decimal
             from datetime import date
@@ -631,3 +675,64 @@ def obtener_unlocode(request):
 
 
 
+@login_required
+def obtener_clientes_disponibles(request):
+    if request.user.is_superuser:
+        clientes = Cliente.objects.all()
+    elif request.user.rol == "Administrador":
+        usuarios_subordinados = Usuario.objects.filter(cliente=request.user.cliente, rol="Revendedor")
+        clientes_ids = [request.user.cliente.id] + list(usuarios_subordinados.values_list('cliente', flat=True))
+        clientes = Cliente.objects.filter(id__in=clientes_ids)
+    else:
+        clientes = Cliente.objects.filter(id=request.user.cliente_id)
+
+    data = [{'id': c.id, 'nombre': c.nombre} for c in clientes]
+    return JsonResponse({'clientes': data})
+@login_required
+def obtener_datos_modal_usuario(request):
+    if not request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return HttpResponseBadRequest("Solo se acepta AJAX aquí")
+
+    # CLIENTES según el rol actual
+    if request.user.is_superuser:
+        clientes = Cliente.objects.all()
+    elif request.user.rol == "Administrador":
+        usuarios_sub = Usuario.objects.filter(cliente=request.user.cliente, rol="Revendedor")
+        clientes_ids = [request.user.cliente.id] + list(usuarios_sub.values_list('cliente', flat=True))
+        clientes = Cliente.objects.filter(id__in=clientes_ids)
+    else:
+        clientes = Cliente.objects.filter(id=request.user.cliente_id)
+
+    clientes_data = [{'id': c.id, 'nombre': c.nombre} for c in clientes]
+
+    # ROLES permitidos
+    if request.user.is_superuser:
+        roles = ['Usuario', 'Administrador', 'Revendedor']
+    else:
+        roles = ['Revendedor']
+
+    return JsonResponse({'clientes': clientes_data, 'roles': roles})
+
+
+@login_required
+def obtener_logs_actividad(request):
+    # Filtra los logs según la jerarquía
+    if request.user.is_superuser:
+        logs = LogActividad.objects.all()
+    elif request.user.rol == "Administrador":
+        usuarios_sub = Usuario.objects.filter(creado_por=request.user)
+        logs = LogActividad.objects.filter(
+            usuario__in=[request.user] + list(usuarios_sub)
+        )
+    elif request.user.rol == "Revendedor":
+        logs = LogActividad.objects.filter(usuario=request.user)
+    else:
+        logs = LogActividad.objects.none()
+
+    logs_data = [{
+        'usuario': log.usuario.username,
+        'mensaje': log.mensaje,
+        'fecha': log.fecha.strftime("%d-%m-%Y %H:%M")
+    } for log in logs.order_by('-fecha')[:15]]
+
+    return JsonResponse({'logs': logs_data})

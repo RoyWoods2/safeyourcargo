@@ -13,8 +13,12 @@ class Usuario(AbstractUser):
         ('Revendedor', 'Revendedor')
     ], default='Usuario')
 
+    # ⚡️ Campo que indica quién creó este usuario
+    creado_por = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='usuarios_creados')
+
     def __str__(self):
         return f"{self.username} - {self.rol}"
+
     
     
 class Cliente(models.Model):
@@ -44,7 +48,7 @@ class Cliente(models.Model):
 
     tramo_cobro = models.PositiveIntegerField()
     tipo_alcance = models.CharField(max_length=20, choices=TIPO_ALCANCE, default='minorista')
-
+    creado_por = models.ForeignKey(Usuario, null=True, blank=True, on_delete=models.SET_NULL, related_name='clientes_creados')
 
     def __str__(self):
         return self.nombre
@@ -224,3 +228,12 @@ class Cobranza(models.Model):
         if not self.valor_prima_cobro:
             self.valor_prima_cobro = self.valor_prima_estimado
         super().save(*args, **kwargs)
+        
+        
+class LogActividad(models.Model):
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    mensaje = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.usuario.username} - {self.mensaje} - {self.fecha}"

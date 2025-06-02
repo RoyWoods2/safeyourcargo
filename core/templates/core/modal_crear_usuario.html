@@ -73,19 +73,13 @@
             <div class="row mb-3">
               <div class="col-md-6">
                 <label for="role" class="form-label">Rol</label>
-<select class="form-select" id="role" name="rol" required>
-
+<select class="form-select" id="rol" name="rol" required></select>
                   <!-- Opciones dinámicas en JS -->
                 </select>
               </div>
               <div class="col-md-6">
                 <label for="cliente" class="form-label">Razón Social Cliente</label>
-                <select class="form-select" id="cliente" name="cliente" required>
-                  <option value="">Selecciona un cliente</option>
-                  {% for cliente in clientes %}
-                    <option value="{{ cliente.id }}">{{ cliente.nombre }}</option>
-                  {% endfor %}
-                </select>
+                <select class="form-select" id="cliente" name="cliente" required></select>
               </div>
             </div>
           </div>
@@ -133,39 +127,53 @@ function getCookie(name) {
 // Configura dinámicamente el <select> de rol según el rol del usuario actual
 document.querySelectorAll('[data-bs-target="#modal-usuario"]').forEach(button => {
   button.addEventListener("click", function () {
-  const usuarioId = this.dataset.id;
-  const username = this.dataset.username;
-  const rol = this.dataset.rol;
-  const clienteId = this.dataset.cliente;
+    const usuarioId = this.dataset.id || "";
+    const username = this.dataset.username || "";
+    const rol = this.dataset.rol || "";
+    const clienteId = this.dataset.cliente || "";
 
-  const rolSelect = document.getElementById("rol");
-  
-  // Limpiar y cargar las opciones según el rol actual
-  rolSelect.innerHTML = "";  // limpia el select
+    // 1️⃣ Fetch de datos permitidos (clientes y roles)
+    fetch("/usuarios/obtener-datos-modal-usuario/", {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    })
+      .then(res => res.json())
+      .then(data => {
+        // 2️⃣ Llenar el select de clientes
+        const clienteSelect = document.getElementById("cliente");
+        clienteSelect.innerHTML = "<option value=''>Selecciona un cliente</option>";
+        data.clientes.forEach(c => {
+          const option = document.createElement("option");
+          option.value = c.id;
+          option.textContent = c.nombre;
+          clienteSelect.appendChild(option);
+        });
+        clienteSelect.value = clienteId;
 
-  const usuarioActualRol = "{{ rol_actual }}";
-  if (usuarioActualRol === "Superusuario") {
-    rolSelect.innerHTML = `
-      <option value="Usuario">Usuario</option>
-      <option value="Administrador">Administrador</option>
-      <option value="Revendedor">Revendedor</option>`;
-  } else {
-    rolSelect.innerHTML = `<option value="Revendedor">Revendedor</option>`;
-  }
+        // 3️⃣ Llenar el select de roles
+        const rolSelect = document.getElementById("rol");
+        rolSelect.innerHTML = "";
+        data.roles.forEach(r => {
+          const option = document.createElement("option");
+          option.value = r;
+          option.textContent = r;
+          if (r === rol) option.selected = true;
+          rolSelect.appendChild(option);
+        });
 
-  // Ahora sí, asigna el valor del rol
-  rolSelect.value = rol;
+        // 4️⃣ Asignar datos de usuario si es edición
+        document.getElementById("usuario_id").value = usuarioId;
+        document.getElementById("username").value = username;
+        document.getElementById("password").value = "";
 
-  // Asignar resto de valores
-  cargarOpcionesRol(""); // sin preselección
-  document.getElementById("usuario_id").value = usuarioId;
-  document.getElementById("username").value = username;
-  document.getElementById("password").value = "";
-  document.getElementById("cliente").value = clienteId;
-
-  document.getElementById("modalUsuarioLabel").textContent = "Editar Usuario";
-  new bootstrap.Modal(document.getElementById("modal-usuario")).show();
-});
+        // 5️⃣ Abrir modal
+        document.getElementById("modalUsuarioLabel").textContent = usuarioId ? "Editar Usuario" : "Crear Usuario";
+        new bootstrap.Modal(document.getElementById("modal-usuario")).show();
+      })
+      .catch(err => {
+        console.error("Error cargando datos:", err);
+        alert("No se pudieron cargar los datos del modal.");
+      });
+  });
 });
 
 document.getElementById("btn-guardar-usuario").addEventListener("click", function () {
@@ -201,5 +209,21 @@ document.getElementById("btn-guardar-usuario").addEventListener("click", functio
     });
 });
 
+document.querySelectorAll('[data-bs-target="#modal-usuario"]').forEach(button => {
+  button.addEventListener("click", function () {
+    fetch("/usuarios/obtener-clientes/")
+      .then(res => res.json())
+      .then(data => {
+        const clienteSelect = document.getElementById("cliente");
+        clienteSelect.innerHTML = "";
+        data.clientes.forEach(c => {
+          const option = document.createElement("option");
+          option.value = c.id;
+          option.textContent = c.nombre;
+          clienteSelect.appendChild(option);
+        });
+      });
+  });
+});
 
 </script>
