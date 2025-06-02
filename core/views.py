@@ -297,12 +297,14 @@ def crear_certificado(request):
             viaje_form.is_valid(),
             notas_form.is_valid()
         ]):
+            # Guardar datos relacionados
             ruta = ruta_form.save()
             metodo = metodo_form.save()
             mercancia = mercancia_form.save()
             viaje = viaje_form.save()
             notas = notas_form.save()
 
+            # Guardar certificado
             certificado = cert_form.save(commit=False)
             certificado.ruta = ruta
             certificado.metodo_embarque = metodo
@@ -311,8 +313,48 @@ def crear_certificado(request):
             certificado.notas = notas
             certificado.save()
 
+            # 🔹 Crear la factura automáticamente
+            from decimal import Decimal
+            from datetime import date
+            import requests
+            from core.services.facturacion_cl import emitir_boleta_facturacion_cl  # Ajusta si está en otro archivo
+
+            factura, created = Factura.objects.get_or_create(
+                certificado=certificado,
+                defaults={
+                    'numero': Factura.objects.count() + 1,
+                    'razon_social': certificado.cliente.nombre,
+                    'rut': certificado.cliente.rut,
+                    'direccion': certificado.cliente.direccion,
+                    'comuna': certificado.cliente.region or 'Por definir',
+                    'ciudad': certificado.cliente.ciudad,
+                    'valor_usd': certificado.calcular_valor_prima(), 
+                    'fecha_emision': date.today()
+                }
+            )
+            factura.valor_usd = certificado.calcular_valor_prima()
+            # Obtener tipo de cambio
+            try:
+                response = requests.get("https://mindicador.cl/api/dolar")
+                dolar = Decimal(str(response.json()['dolar']['valor']))
+            except Exception:
+                dolar = Decimal('950.00')
+
+            factura.tipo_cambio = dolar
+            factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
+            factura.save()
+
+            # 🔹 Emitir la boleta exenta
+            resultado_emision = emitir_boleta_facturacion_cl(factura)
+
+            # 🔹 Respuesta AJAX o redirección normal
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'success': True})
+                return JsonResponse({
+                    'success': True,
+                    'factura_emitida': True,
+                    'resultado': resultado_emision
+                })
+
             return redirect('crear_certificado')
 
         # Si hay errores y es AJAX
@@ -329,7 +371,7 @@ def crear_certificado(request):
                 }
             })
 
-    # Método GET (carga de página inicial)
+    # GET: carga inicial
     cert_form = CertificadoTransporteForm()
     ruta_form = RutaForm()
     metodo_form = MetodoEmbarqueForm()
@@ -355,6 +397,7 @@ def crear_certificado(request):
         'certificados': certificados,
     }
     return render(request, 'certificados/crear_certificado.html', context)
+
 
 @login_required
 def clean_valor_prima(self):
@@ -395,7 +438,7 @@ def factura_pdf(request, pk):
             'direccion': certificado.cliente.direccion,
             'comuna': certificado.cliente.region or 'Por definir',
             'ciudad': certificado.cliente.ciudad,
-            'valor_usd': certificado.tipo_mercancia.valor_prima,
+            'valor_usd': certificado.calcular_valor_prima(),  # ✅ Usa el cálculo correcto
             'fecha_emision': date.today()
         }
     )
@@ -412,16 +455,28 @@ def factura_pdf(request, pk):
     factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
     factura.save()
 
-    # Emitir la BOLETA EXENTA a facturacion.cl
-    resultado_emision = emitir_boleta_facturacion_cl(factura)
+    # Calcular total en palabras
+    from num2words import num2words
+    total_palabras = num2words(int(factura.valor_clp), lang='es').replace("coma cero cero", "")
 
-    # Mostrar el resultado en un HTML temporal (depuración)
-    html = f"""
-    <h1>Resultado de Emisión</h1>
-    <pre>{resultado_emision}</pre>
-    <p>✅ Revisa la carpeta Escritorio por el archivo <strong>DEBUG_BOLETA.TXT</strong> para ver el archivo plano enviado.</p>
-    """
-    return HttpResponse(html)
+    # Formatear fecha
+    fecha_formateada = date_format(factura.fecha_emision, "d \d\e F \d\e Y")
+
+    # Renderizar el template a HTML
+    html_string = render_to_string('certificados/factura_pdf.html', {
+        'factura': factura,
+        'total_palabras': total_palabras,
+        'fecha_formateada': fecha_formateada,
+    })
+
+    # Convertir HTML a PDF
+    html = HTML(string=html_string, base_url=request.build_absolute_uri())
+    pdf_file = html.write_pdf()
+
+    # Devolver respuesta PDF
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="factura-C{certificado.id}.pdf"'
+    return response
 
 
 

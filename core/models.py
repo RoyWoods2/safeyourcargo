@@ -81,10 +81,10 @@ class CertificadoTransporte(models.Model):
     notas = models.OneToOneField('NotasNumeros', on_delete=models.CASCADE)
 
     def calcular_valor_asegurado(self):
-        return (self.tipo_mercancia.valor_fca + self.tipo_mercancia.valor_flete) * 1.10
+        return (self.tipo_mercancia.valor_fca + self.tipo_mercancia.valor_flete) * Decimal('1.10')
 
     def calcular_valor_prima(self):
-        prima = self.calcular_valor_asegurado() * self.cliente.tasa_prima
+        prima = self.calcular_valor_asegurado() * self.cliente.tasa
         return max(prima, 20.00)
     
     
