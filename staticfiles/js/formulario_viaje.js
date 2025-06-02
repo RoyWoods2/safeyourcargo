@@ -97,7 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(data => {
         select.innerHTML = '<option value="">Seleccione un aeropuerto</option>';
         (data.aeropuertos || []).forEach(a => {
-          const option = new Option(`${a.name} (${a.city})`, `${a.name} (${a.city})`);
+          const option = new Option(`${a.name} (${a.city})`, a.iata);
           select.appendChild(option);
         });
       })
@@ -175,4 +175,51 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // 🔹 Ejecutar carga inicial
   cargarPaises();
+  actualizarVistaTransporte();
+  modoTransporte.addEventListener("change", actualizarVistaTransporte);
+function actualizarVistaTransporte() {
+  const modo = modoTransporte.value;
+
+  const labelNombreTransporte = document.getElementById("label_nombre_transporte");
+  const labelNumeroViaje = document.getElementById("label_numero_viaje");
+  const labelAeropuertoOrigen = document.getElementById("label_aeropuerto_origen");
+  const labelAeropuertoDestino = document.getElementById("label_aeropuerto_destino");
+
+  const grupoAeropuertoOrigen = document.getElementById("grupo_aeropuerto_origen");
+  const grupoAeropuertoDestino = document.getElementById("grupo_aeropuerto_destino");
+
+  if (modo === "Aereo") {
+    labelNombreTransporte.textContent = "Nombre Avión / Línea Aérea";
+    labelNumeroViaje.textContent = "N° Viaje / Vuelo";
+    labelAeropuertoOrigen.textContent = "Aeropuerto Origen";
+    labelAeropuertoDestino.textContent = "Aeropuerto Destino";
+
+    grupoAeropuertoOrigen.classList.remove("d-none");
+    grupoAeropuertoDestino.classList.remove("d-none");
+  } else if (modo === "Maritimo") {
+    labelNombreTransporte.textContent = "Nombre Buque / Naviera";
+    labelNumeroViaje.textContent = "N° Viaje / Travesía";
+    labelAeropuertoOrigen.textContent = "Puerto de Origen";
+    labelAeropuertoDestino.textContent = "Puerto de Destino";
+
+    grupoAeropuertoOrigen.classList.remove("d-none");
+    grupoAeropuertoDestino.classList.remove("d-none");
+  } else if (modo === "TerrestreFerroviario") {
+    labelNombreTransporte.textContent = "Nombre Vehículo / Línea Ferroviaria";
+    labelNumeroViaje.textContent = "N° Viaje / Transporte";
+
+    // 🔴 Ocultar completamente los contenedores de los "aeropuertos"
+    grupoAeropuertoOrigen.classList.add("d-none");
+    grupoAeropuertoDestino.classList.add("d-none");
+  } else {
+    // Otros casos
+    labelNombreTransporte.textContent = "Nombre Transporte";
+    labelNumeroViaje.textContent = "N° Viaje";
+
+    grupoAeropuertoOrigen.classList.add("d-none");
+    grupoAeropuertoDestino.classList.add("d-none");
+  }
+}
+
+
 });
