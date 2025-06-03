@@ -5,35 +5,42 @@
 {% block content %}
 <div class="container-fluid py-4">
   <h1 class="mb-4">Dashboard</h1>
+
   <div class="row g-4">
     <div class="col-md-3">
       <div class="card p-3 text-center">
-        <div class="card-title">Certificados</div>
+        <div class="card-title">Certificados Emitidos</div>
         <div class="card-number text-primary">{{ total_certificados_sum }}</div>
-        <div class="text-success small">+2.86% últimos 7 días</div>
+      </div>
+    </div>
+
+    {% if user.is_superuser or user.rol == "Administrador" %}
+    <div class="col-md-3">
+      <div class="card p-3 text-center">
+        <div class="card-title">Prima Total (USD)</div>
+        <div class="card-number text-warning">${{ total_prima_usd }}</div>
       </div>
     </div>
     <div class="col-md-3">
       <div class="card p-3 text-center">
-        <div class="card-title">Total Primas</div>
-        <div class="card-number text-warning">70</div>
-        <div class="text-danger small">-0.68% últimos 7 días</div>
+        <div class="card-title">Prima Total (CLP)</div>
+        <div class="card-number text-success">${{ total_prima_clp }}</div>
       </div>
     </div>
     <div class="col-md-3">
       <div class="card p-3 text-center">
-        <div class="card-title">Clientes</div>
-        <div class="card-number text-danger">{{ certificados_clientes|length }}</div>
-        <div class="text-danger small">-8.33% últimos 7 días</div>
+        <div class="card-title">Clientes Activos</div>
+        <div class="card-number text-danger">{{ total_clientes }}</div>
       </div>
     </div>
+    {% elif user.rol == "Revendedor" %}
     <div class="col-md-3">
       <div class="card p-3 text-center">
-        <div class="card-title">Usuarios</div>
-        <div class="card-number text-success">1</div>
-        <div class="text-success small">+100% últimos 7 días</div>
+        <div class="card-title">Tus Certificados</div>
+        <div class="card-number text-warning">{{ total_certificados_usuario }}</div>
       </div>
     </div>
+    {% endif %}
   </div>
 
   <div class="row g-4 mt-4">
@@ -45,11 +52,43 @@
     </div>
     <div class="col-md-4">
       <div class="card p-3">
-        <h6 class="mb-3">Origen</h6>
+        <h6 class="mb-3">Mapa de Origen</h6>
         <div id="origen-map" style="height:300px;"></div>
       </div>
     </div>
   </div>
+
+  {% if user.is_superuser or user.rol == "Administrador" %}
+  <div class="row g-4 mt-4">
+    <div class="col-md-12">
+      <div class="card p-3">
+        <h6 class="mb-3">Últimos Certificados Emitidos</h6>
+        <table class="table table-sm table-striped">
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th>Cliente</th>
+              <th>País Destino</th>
+              <th>Fecha Embarque</th>
+              <th>Prima (USD)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cert in ultimos_certificados %}
+            <tr>
+              <td>C-{{ cert.id }}</td>
+              <td>{{ cert.cliente.nombre }}</td>
+              <td>{{ cert.ruta.pais_destino }}</td>
+              <td>{{ cert.fecha_partida }}</td>
+              <td>{{ cert.tipo_mercancia.valor_prima }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -59,7 +98,7 @@
   const origenPaises = {{ origen_paises|safe }};
   const origenCantidades = {{ origen_cantidades|safe }};
 
-  // Gráfico de Certificados por Cliente con labels inclinados
+  // Gráfico de Certificados por Cliente
   var certificadosData = {
     x: certificadosClientes,
     y: certificadosTotales,
@@ -70,11 +109,7 @@
   var certificadosLayout = {
     margin: { t: 20 },
     yaxis: { title: 'Cantidad de Certificados' },
-    xaxis: {
-      title: 'Cliente',
-      tickangle: -45,
-      automargin: true
-    },
+    xaxis: { title: 'Cliente', tickangle: -45, automargin: true },
     plot_bgcolor: '#fff',
     paper_bgcolor: '#fff'
   };
@@ -94,11 +129,7 @@
   }];
 
   var origenLayout = {
-    geo: {
-      showframe: false,
-      showcoastlines: false,
-      projection: { type: 'equirectangular' }
-    },
+    geo: { showframe: false, showcoastlines: false, projection: { type: 'equirectangular' }},
     margin: { t: 0, b: 0 }
   };
 

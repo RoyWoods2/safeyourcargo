@@ -11,7 +11,7 @@ from django.core.paginator import Paginator
 from weasyprint import HTML
 from django.template.loader import render_to_string
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import requests
 from django.utils.formats import date_format
 from num2words import num2words
@@ -31,34 +31,111 @@ from django.views.decorators.csrf import csrf_exempt
 logger = logging.getLogger(__name__)
 from django.contrib.auth import get_user_model
 import json
-from django.db.models import Q
+from django.db.models import Q, Count, Sum
 from .utils import registrar_actividad
 Usuario = get_user_model()
 
 @login_required
 def dashboard(request):
-    certificados_data = (
-        Cliente.objects
-        .annotate(total_certificados=Count('certificadotransporte'))
-        .filter(total_certificados__gt=0)
-        .order_by('-total_certificados')
+  
+
+    user = request.user
+
+    # Inicialización
+    certificados_data = []
+    certificados_clientes = []
+    certificados_totales = []
+    total_certificados_sum = 0
+    total_prima_usd = Decimal('0.0')
+    total_prima_clp = Decimal('0.0')
+    total_clientes = 0
+    ultimos_certificados = []
+
+    # Obtener tipo de cambio actual (USD a CLP)
+    try:
+        response = requests.get("https://mindicador.cl/api/dolar")
+        dolar = Decimal(str(response.json()['dolar']['valor']))
+    except Exception:
+        dolar = Decimal('950.00')
+
+    if user.is_superuser or user.rol == "Administrador":
+        # Datos globales
+        certificados_data = (
+            Cliente.objects
+            .annotate(total_certificados=Count('certificadotransporte'))
+            .filter(total_certificados__gt=0)
+            .order_by('-total_certificados')
+        )
+        certificados_clientes = [c.nombre for c in certificados_data]
+        certificados_totales = [c.total_certificados for c in certificados_data]
+        total_certificados_sum = sum(certificados_totales)
+
+        # Total prima USD
+        total_prima_usd = (
+            CertificadoTransporte.objects
+            .aggregate(total=Sum('tipo_mercancia__valor_prima'))['total'] or Decimal('0.0')
+        )
+
+        # Calcular prima total CLP
+        total_prima_clp = total_prima_usd * dolar
+
+        # Total clientes con certificados
+        total_clientes = Cliente.objects.filter(certificadotransporte__isnull=False).distinct().count()
+
+        # Últimos certificados emitidos
+        ultimos_certificados = (
+            CertificadoTransporte.objects
+            .select_related('cliente', 'ruta', 'tipo_mercancia')
+            .order_by('-id')[:5]
+        )
+
+    elif user.rol == "Revendedor":
+        # Solo sus certificados
+        propios_certificados = CertificadoTransporte.objects.filter(cliente=user.cliente)
+        certificados_data = (
+            Cliente.objects
+            .filter(id=user.cliente.id)
+            .annotate(total_certificados=Count('certificadotransporte'))
+        )
+        certificados_clientes = [user.cliente.nombre]
+        certificados_totales = [propios_certificados.count()]
+        total_certificados_sum = propios_certificados.count()
+
+        # Total prima USD (solo sus certificados)
+        total_prima_usd = (
+            propios_certificados
+            .aggregate(total=Sum('tipo_mercancia__valor_prima'))['total'] or Decimal('0.0')
+        )
+        total_prima_clp = total_prima_usd * dolar
+
+    # Datos dinámicos para origen de países
+    origen_data = (
+        CertificadoTransporte.objects
+        .values('ruta__pais_origen')
+        .annotate(cantidad=Count('id'))
+        .order_by('-cantidad')
     )
+    origen_paises = [item['ruta__pais_origen'] for item in origen_data]
+    origen_cantidades = [item['cantidad'] for item in origen_data]
 
-    certificados_clientes = [c.nombre for c in certificados_data]
-    certificados_totales = [c.total_certificados for c in certificados_data]
-    total_certificados_sum = sum(certificados_totales)
-
-    origen_paises = ['Chile', 'China', 'España']
-    origen_cantidades = [1, 5, 2]
+    # Redondear y eliminar comas innecesarias (al entero más cercano)
+    total_prima_usd = total_prima_usd.quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
+    total_prima_clp = total_prima_clp.quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
 
     context = {
         'certificados_clientes': certificados_clientes,
         'certificados_totales': certificados_totales,
-        'total_certificados_sum': total_certificados_sum,  # SUMA EN LA VISTA
+        'total_certificados_sum': total_certificados_sum,
+        'total_prima_usd': total_prima_usd,
+        'total_prima_clp': total_prima_clp,
+        'total_clientes': total_clientes,
+        'ultimos_certificados': ultimos_certificados,
         'origen_paises': origen_paises,
         'origen_cantidades': origen_cantidades,
     }
     return render(request, 'core/dashboard.html', context)
+
+
 
 
 def home_redirect(request):
@@ -72,7 +149,7 @@ def login_view(request):
 
         if user is not None:
             login(request, user)
-            return redirect('lista_usuarios')  # O la vista que quieras mostrar al entrar
+            return redirect('dashboard')  # O la vista que quieras mostrar al entrar
         else:
             messages.error(request, "Usuario o contraseña incorrectos.")
 
