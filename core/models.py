@@ -55,9 +55,11 @@ class Cliente(models.Model):
     
 class Pais(models.Model):
     nombre = models.CharField(max_length=100)
+    sigla = models.CharField(max_length=10, unique=True)
 
     def __str__(self):
         return self.nombre
+
 
 class Ciudad(models.Model):
     pais = models.ForeignKey(Pais, on_delete=models.CASCADE, related_name='ciudades')
@@ -165,6 +167,9 @@ class Viaje(models.Model):
     vuelo_destino_ciudad = models.CharField(max_length=100)
     aeropuerto_destino = models.CharField(max_length=100)
     descripcion_carga = models.TextField()
+    vuelo_origen_pais_fk = models.ForeignKey(Pais, on_delete=models.CASCADE, related_name='viajes_origen', null=True, blank=True)
+    vuelo_destino_pais_fk = models.ForeignKey(Pais, on_delete=models.CASCADE, related_name='viajes_destino', null=True, blank=True)
+    
 
 class NotasNumeros(models.Model):
     referencia = models.CharField(max_length=100)
@@ -189,7 +194,10 @@ class Factura(models.Model):
     ciudad = models.CharField(max_length=100)
 
     observaciones = models.TextField(blank=True, null=True)
-
+    def save(self, *args, **kwargs):
+        # Antes de guardar, actualizamos valor_clp
+        self.valor_clp = self.valor_usd * self.tipo_cambio
+        super().save(*args, **kwargs)
     def __str__(self):
         return f"Factura N° {self.numero} - Certificado C-{self.certificado.id}"
     

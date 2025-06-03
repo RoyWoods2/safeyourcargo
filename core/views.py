@@ -357,12 +357,14 @@ def crear_certificado(request):
             certificado.notas = notas
             certificado.save()
             registrar_actividad(request.user, f"Creó certificado: C-{certificado.id}")
-            # 🔹 Crear la factura automáticamente
+
+            # Crear la factura automáticamente
             from decimal import Decimal
             from datetime import date
             import requests
-            from core.services.facturacion_cl import emitir_boleta_facturacion_cl  # Ajusta si está en otro archivo
+            from core.services.facturacion_cl import emitir_boleta_facturacion_cl  # Ajusta la ruta si es necesario
 
+            # Crear la factura con el valor prima real de la mercancía (no recalculado)
             factura, created = Factura.objects.get_or_create(
                 certificado=certificado,
                 defaults={
@@ -372,26 +374,28 @@ def crear_certificado(request):
                     'direccion': certificado.cliente.direccion,
                     'comuna': certificado.cliente.region or 'Por definir',
                     'ciudad': certificado.cliente.ciudad,
-                    'valor_usd': certificado.calcular_valor_prima(), 
+                    'valor_usd': certificado.tipo_mercancia.valor_prima,  # ✅ valor prima real
                     'fecha_emision': date.today()
                 }
             )
-            factura.valor_usd = certificado.calcular_valor_prima()
-            # Obtener tipo de cambio
+            factura.valor_usd = certificado.tipo_mercancia.valor_prima  # ✅ actualiza el valor prima real
+
+            # Obtener tipo de cambio dinámico
             try:
                 response = requests.get("https://mindicador.cl/api/dolar")
                 dolar = Decimal(str(response.json()['dolar']['valor']))
             except Exception:
                 dolar = Decimal('950.00')
 
+            # Calcular valor CLP
             factura.tipo_cambio = dolar
             factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
             factura.save()
 
-            # 🔹 Emitir la boleta exenta
+            # Emitir la boleta exenta
             resultado_emision = emitir_boleta_facturacion_cl(factura)
 
-            # 🔹 Respuesta AJAX o redirección normal
+            # Respuesta AJAX o redirección normal
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
@@ -443,6 +447,7 @@ def crear_certificado(request):
     return render(request, 'certificados/crear_certificado.html', context)
 
 
+
 @login_required
 def clean_valor_prima(self):
     prima = self.cleaned_data.get('valor_prima')
@@ -470,9 +475,15 @@ def certificado_pdf(request, pk):
 
 @login_required
 def factura_pdf(request, pk):
+    from decimal import Decimal
+    from datetime import date
+    import requests
+    from num2words import num2words
+    from django.utils.formats import date_format
+
     certificado = get_object_or_404(CertificadoTransporte, pk=pk)
 
-    # Obtener o crear la factura
+    # Obtener o crear la factura usando el valor prima real de la mercancía (no recalculado)
     factura, created = Factura.objects.get_or_create(
         certificado=certificado,
         defaults={
@@ -482,12 +493,13 @@ def factura_pdf(request, pk):
             'direccion': certificado.cliente.direccion,
             'comuna': certificado.cliente.region or 'Por definir',
             'ciudad': certificado.cliente.ciudad,
-            'valor_usd': certificado.calcular_valor_prima(),  # ✅ Usa el cálculo correcto
+            'valor_usd': certificado.tipo_mercancia.valor_prima,  # ✅ valor prima real
             'fecha_emision': date.today()
         }
     )
+    factura.valor_usd = certificado.tipo_mercancia.valor_prima  # ✅ actualiza el valor prima real
 
-    # Obtener tipo de cambio
+    # Obtener tipo de cambio dinámico
     try:
         response = requests.get("https://mindicador.cl/api/dolar")
         dolar = Decimal(str(response.json()['dolar']['valor']))
@@ -500,7 +512,6 @@ def factura_pdf(request, pk):
     factura.save()
 
     # Calcular total en palabras
-    from num2words import num2words
     total_palabras = num2words(int(factura.valor_clp), lang='es').replace("coma cero cero", "")
 
     # Formatear fecha
@@ -521,6 +532,7 @@ def factura_pdf(request, pk):
     response = HttpResponse(pdf_file, content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="factura-C{certificado.id}.pdf"'
     return response
+
 
 
 

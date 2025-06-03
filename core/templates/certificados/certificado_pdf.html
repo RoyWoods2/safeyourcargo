@@ -112,13 +112,58 @@
   <div class="section-title">Transporte</div>
   <table>
     <tr><td><strong>Fecha Embarque:</strong> {{ certificado.fecha_partida }}</td><td><strong>Cláusula:</strong> Cláusula {{ certificado.metodo_embarque.clausula }}</td></tr>
-    <tr><td><strong>País Origen:</strong> {{ certificado.ruta.pais_origen }}</td><td><strong>Ciudad Origen:</strong> {{ certificado.ruta.ciudad_origen }}</td></tr>
-    <tr><td><strong>País Destino:</strong> {{ certificado.ruta.pais_destino }}</td><td><strong>Ciudad Destino:</strong> {{ certificado.ruta.ciudad_destino }}</td></tr>
-    <tr><td><strong>Modo de Transporte:</strong> {{ certificado.metodo_embarque.modo_transporte }}</td><td><strong>Embalaje:</strong> {{ certificado.metodo_embarque.embalaje }}</td></tr>
+    <tr><td><strong>País Origen:</strong> {{ certificado.viaje.vuelo_origen_pais_fk.nombre }}</td><td><strong>Ciudad Origen:</strong> {{ certificado.viaje.vuelo_origen_ciudad }}</td></tr>
+    <tr><td><strong>País Destino:</strong> {{ certificado.viaje.vuelo_destino_pais_fk.nombre }}</td><td><strong>Ciudad Destino:</strong> {{ certificado.viaje.vuelo_destino_ciudad }}</td></tr>
+<tr>
+  <td><strong>Modo de Transporte:</strong> {{ certificado.metodo_embarque.modo_transporte }}</td>
+  <td>
+    <strong>Embalaje:</strong>
+    {% if certificado.metodo_embarque.modo_transporte == "Aereo" %}
+      {% if certificado.metodo_embarque.tipo_embalaje_aereo %}
+        {{ certificado.metodo_embarque.tipo_embalaje_aereo }}
+        {% if certificado.metodo_embarque.otro_embalaje_aereo %}
+          ({{ certificado.metodo_embarque.otro_embalaje_aereo }})
+        {% endif %}
+      {% else %}
+        No especificado
+      {% endif %}
+    {% elif certificado.metodo_embarque.modo_transporte == "Maritimo" %}
+      {% if certificado.metodo_embarque.embalaje_maritimo %}
+        {{ certificado.metodo_embarque.embalaje_maritimo }}
+        {% if certificado.metodo_embarque.tipo_container_maritimo %}
+          - {{ certificado.metodo_embarque.tipo_container_maritimo }}
+        {% endif %}
+        {% if certificado.metodo_embarque.tipo_embalaje_lcl %}
+          - {{ certificado.metodo_embarque.tipo_embalaje_lcl }}
+        {% endif %}
+        {% if certificado.metodo_embarque.otro_embalaje_lcl %}
+          ({{ certificado.metodo_embarque.otro_embalaje_lcl }})
+        {% endif %}
+      {% else %}
+        No especificado
+      {% endif %}
+    {% elif certificado.metodo_embarque.modo_transporte == "TerrestreFerroviario" %}
+      {% if certificado.metodo_embarque.tipo_embalaje_terrestre %}
+        {{ certificado.metodo_embarque.tipo_embalaje_terrestre }}
+        {% if certificado.metodo_embarque.otro_embalaje_terrestre %}
+          ({{ certificado.metodo_embarque.otro_embalaje_terrestre }})
+        {% endif %}
+      {% else %}
+        No especificado
+      {% endif %}
+    {% else %}
+      No especificado
+    {% endif %}
+  </td>
+</tr>
     <tr><td><strong>Nombre Nave / Transporte:</strong> {{ certificado.viaje.nombre_avion }}</td><td><strong>Tipo Carga:</strong> {{ certificado.metodo_embarque.tipo_carga }}</td></tr>
     <tr><td><strong>Puerto Origen / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_origen }}</td><td><strong>Puerto Destino / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_destino }}</td></tr>
     <tr><td><strong>Nº Documento de Transporte:</strong> {{ certificado.viaje.numero_viaje }}</td><td><strong>Referencias:</strong> {{ certificado.notas.referencia }}</td></tr>
   </table>
+<div class="section-title">Nota de la Descripción de Carga</div>
+<p>
+<strong>Descripción de la carga:</strong> {{ certificado.viaje.descripcion_carga|default:"No especificada" }}
+</p>
 
   <div class="section-title">Prima y Seguro</div>
   <table>
