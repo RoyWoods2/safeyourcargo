@@ -27,4 +27,7 @@ urlpatterns = [
     path('api/aeropuertos/', views.obtener_aeropuertos, name='api_aeropuertos'),
     path('api/unlocode/', views.obtener_unlocode, name='api_unlocode'),
     path("logs-actividad/", views.obtener_logs_actividad, name="logs_actividad"),
+    path('certificados/probar-envio/', views.probar_envio_factura, name='probar_envio_factura'),
+    path('certificados/probar-envio-xml/', views.probar_envio, name='probar_envio'),
+
 ]

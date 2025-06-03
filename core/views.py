@@ -1,7 +1,7 @@
 # views.py
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
-from .models import Cliente,Ciudad, CertificadoTransporte, Factura, Cobranza, Usuario, LogActividad  
+from .models import Cliente,Ciudad, CertificadoTransporte, Factura, Cobranza, Usuario, LogActividad, obtener_siguiente_folio 
 from .forms import *
 from django.views.decorators.http import require_POST
 from django.contrib.auth.hashers import make_password
@@ -15,7 +15,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import requests
 from django.utils.formats import date_format
 from num2words import num2words
-from core.services.facturacion_cl import emitir_boleta_facturacion_cl
+from core.services.facturacion_cl import emitir_factura_exenta_cl, generar_txt_factura_exenta,generar_xml_factura_exenta
 from core.services.unlocode_utils import get_ports_by_country,get_airports_by_country,pais_a_codigo # 🔹 IMPORTA AQUÍ
 import logging
 import tempfile
@@ -33,6 +33,7 @@ from django.contrib.auth import get_user_model
 import json
 from django.db.models import Q, Count, Sum
 from .utils import registrar_actividad
+from xml.etree.ElementTree import Element, SubElement, tostring
 Usuario = get_user_model()
 
 @login_required
@@ -418,14 +419,26 @@ def crear_certificado(request):
             viaje_form.is_valid(),
             notas_form.is_valid()
         ]):
-            # Guardar datos relacionados
+            # Guardar relacionados
             ruta = ruta_form.save()
             metodo = metodo_form.save()
             mercancia = mercancia_form.save()
-            viaje = viaje_form.save()
+            viaje = viaje_form.save(commit=False)
+
+            # Buscar países por sigla
+            from core.models import Pais
+            origen_pais = Pais.objects.filter(sigla__iexact=viaje.vuelo_origen_pais).first()
+            destino_pais = Pais.objects.filter(sigla__iexact=viaje.vuelo_destino_pais).first()
+            if origen_pais:
+                viaje.vuelo_origen_pais = origen_pais.nombre
+                viaje.vuelo_origen_pais_fk = origen_pais
+            if destino_pais:
+                viaje.vuelo_destino_pais = destino_pais.nombre
+                viaje.vuelo_destino_pais_fk = destino_pais
+            viaje.save()
+
             notas = notas_form.save()
 
-            # Guardar certificado
             certificado = cert_form.save(commit=False)
             certificado.ruta = ruta
             certificado.metodo_embarque = metodo
@@ -433,46 +446,49 @@ def crear_certificado(request):
             certificado.viaje = viaje
             certificado.notas = notas
             certificado.save()
+
             registrar_actividad(request.user, f"Creó certificado: C-{certificado.id}")
 
             # Crear la factura automáticamente
             from decimal import Decimal
             from datetime import date
             import requests
-            from core.services.facturacion_cl import emitir_boleta_facturacion_cl  # Ajusta la ruta si es necesario
+            from core.services.facturacion_cl import emitir_factura_exenta_cl
 
-            # Crear la factura con el valor prima real de la mercancía (no recalculado)
+            try:
+                folio_disponible = obtener_siguiente_folio()
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': f"❌ Error al obtener folio: {str(e)}"})
+
             factura, created = Factura.objects.get_or_create(
                 certificado=certificado,
                 defaults={
                     'numero': Factura.objects.count() + 1,
+                    'folio_sii': folio_disponible,
                     'razon_social': certificado.cliente.nombre,
                     'rut': certificado.cliente.rut,
                     'direccion': certificado.cliente.direccion,
                     'comuna': certificado.cliente.region or 'Por definir',
                     'ciudad': certificado.cliente.ciudad,
-                    'valor_usd': certificado.tipo_mercancia.valor_prima,  # ✅ valor prima real
+                    'valor_usd': certificado.tipo_mercancia.valor_prima,
                     'fecha_emision': date.today()
                 }
             )
-            factura.valor_usd = certificado.tipo_mercancia.valor_prima  # ✅ actualiza el valor prima real
 
-            # Obtener tipo de cambio dinámico
+            factura.valor_usd = certificado.tipo_mercancia.valor_prima
+
             try:
                 response = requests.get("https://mindicador.cl/api/dolar")
                 dolar = Decimal(str(response.json()['dolar']['valor']))
             except Exception:
                 dolar = Decimal('950.00')
 
-            # Calcular valor CLP
             factura.tipo_cambio = dolar
-            factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
+            factura.valor_clp = factura.valor_usd * dolar
             factura.save()
 
-            # Emitir la boleta exenta
-            resultado_emision = emitir_boleta_facturacion_cl(factura)
+            resultado_emision = emitir_factura_exenta_cl(factura)
 
-            # Respuesta AJAX o redirección normal
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
@@ -482,7 +498,6 @@ def crear_certificado(request):
 
             return redirect('crear_certificado')
 
-        # Si hay errores y es AJAX
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({
                 'success': False,
@@ -496,7 +511,7 @@ def crear_certificado(request):
                 }
             })
 
-    # GET: carga inicial
+    # GET
     cert_form = CertificadoTransporteForm()
     ruta_form = RutaForm()
     metodo_form = MetodoEmbarqueForm()
@@ -504,13 +519,9 @@ def crear_certificado(request):
     viaje_form = ViajeForm()
     notas_form = NotasNumerosForm()
 
-    certificados_list = CertificadoTransporte.objects.select_related(
-        'cliente', 'notas'
-    ).order_by('-id')
-
+    certificados_list = CertificadoTransporte.objects.select_related('cliente', 'notas').order_by('-id')
     paginator = Paginator(certificados_list, 10)
-    page = request.GET.get('page')
-    certificados = paginator.get_page(page)
+    certificados = paginator.get_page(request.GET.get('page'))
 
     context = {
         'cert_form': cert_form,
@@ -522,6 +533,7 @@ def crear_certificado(request):
         'certificados': certificados,
     }
     return render(request, 'certificados/crear_certificado.html', context)
+
 
 
 
@@ -825,3 +837,147 @@ def obtener_logs_actividad(request):
     } for log in logs.order_by('-fecha')[:15]]
 
     return JsonResponse({'logs': logs_data})
+
+
+@login_required
+def probar_envio_factura(request):
+    logs = []
+    try:
+        logs.append("🔍 Iniciando prueba de envío de factura...")
+
+        # Usamos el último certificado creado para pruebas
+        certificado = CertificadoTransporte.objects.select_related('cliente', 'ruta', 'tipo_mercancia').last()
+        if not certificado:
+            messages.error(request, "❌ No hay certificados disponibles para simular el envío.")
+            return redirect('crear_certificado')
+
+        logs.append(f"✅ Certificado seleccionado: C-{certificado.id}")
+
+        # Crear o recuperar factura asociada
+        factura, created = Factura.objects.get_or_create(
+            certificado=certificado,
+            defaults={
+                'numero': Factura.objects.count() + 1,
+                'razon_social': certificado.cliente.nombre,
+                'rut': certificado.cliente.rut,
+                'direccion': certificado.cliente.direccion,
+                'comuna': certificado.cliente.region or 'Por definir',
+                'ciudad': certificado.cliente.ciudad,
+                'valor_usd': certificado.tipo_mercancia.valor_prima,
+                'fecha_emision': date.today()
+            }
+        )
+
+        # Reasignar valor prima por seguridad
+        factura.valor_usd = certificado.tipo_mercancia.valor_prima
+
+        # Obtener tipo de cambio actual
+        try:
+            response = requests.get("https://mindicador.cl/api/dolar")
+            dolar = Decimal(str(response.json()['dolar']['valor']))
+            logs.append(f"💱 Tipo de cambio obtenido: ${dolar}")
+        except Exception as e:
+            dolar = Decimal('950.00')
+            logs.append(f"⚠️ Error al obtener dólar. Usando default 950.00. Detalle: {e}")
+
+        factura.tipo_cambio = dolar
+        factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
+        factura.save()
+
+        logs.append(f"📦 Factura generada (USD {factura.valor_usd} → CLP {factura.valor_clp})")
+
+        # Enviar a facturacion.cl
+        resultado = emitir_factura_exenta_cl(factura)
+        if resultado.get('success'):
+            logs.append("✅ ENVÍO EXITOSO a Facturacion.cl")
+            logs.append(f"📨 Respuesta: {resultado['respuesta']}")
+        else:
+            logs.append("❌ ERROR en el envío a Facturacion.cl")
+            logs.append(f"🧨 Detalle: {resultado.get('error')}")
+
+    except Exception as ex:
+        logs.append("❌ Excepción no controlada:")
+        logs.append(str(ex))
+
+    return render(request, 'certificados/prueba_envio_resultado.html', {'logs': logs})
+
+
+@login_required
+def probar_envio(request):
+    try:
+        factura = Factura.objects.select_related('certificado').order_by('-id').first()
+
+        if not factura:
+            return HttpResponse("No hay facturas disponibles para prueba.", status=404)
+
+        contenido_xml = generar_xml_factura_exenta(factura)
+        filename = f"factura_exenta_C{factura.certificado.id}.xml"
+
+        response = HttpResponse(contenido_xml, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        return HttpResponse(f"❌ Error al generar archivo XML de prueba: {str(e)}", status=500)
+
+    
+    
+def descargar_xml_dte(request):
+    factura = Factura.objects.select_related('certificado', 'certificado__cliente', 'certificado__ruta').last()
+    if not factura:
+        return HttpResponse("No hay factura para generar XML", status=400)
+
+    certificado = factura.certificado
+    cliente = certificado.cliente
+
+    # XML base
+    root = Element("DTE", version="1.0")
+    doc = SubElement(root, "Documento", ID="F1T34")
+
+    encabezado = SubElement(doc, "Encabezado")
+    id_doc = SubElement(encabezado, "IdDoc")
+    SubElement(id_doc, "TipoDTE").text = "34"
+    SubElement(id_doc, "Folio").text = "1"
+    SubElement(id_doc, "FchEmis").text = factura.fecha_emision.strftime("%Y-%m-%d")
+
+    emisor = SubElement(encabezado, "Emisor")
+    SubElement(emisor, "RUTEmisor").text = "76000555-0"
+    SubElement(emisor, "RznSoc").text = "Roberto Gomez"
+    SubElement(emisor, "GiroEmis").text = "Importación"
+    SubElement(emisor, "Acteco").text = "515009"
+    SubElement(emisor, "DirOrigen").text = "Pedro de Valdivia 25"
+    SubElement(emisor, "CmnaOrigen").text = "Providencia"
+    SubElement(emisor, "CiudadOrigen").text = "SANTIAGO"
+
+    receptor = SubElement(encabezado, "Receptor")
+    SubElement(receptor, "RUTRecep").text = cliente.rut or "11111111-1"
+    SubElement(receptor, "CdgIntRecep").text = "123123123"
+    SubElement(receptor, "RznSocRecep").text = cliente.nombre or "CLIENTE"
+    SubElement(receptor, "GiroRecep").text = "SERVICIO"
+    SubElement(receptor, "DirRecep").text = cliente.direccion or "SIN DIRECCIÓN"
+    SubElement(receptor, "CmnaRecep").text = cliente.region or "SANTIAGO"
+    SubElement(receptor, "CiudadRecep").text = cliente.ciudad or "SANTIAGO"
+
+    totales = SubElement(encabezado, "Totales")
+    total_valor = int(factura.valor_clp or 0)
+    SubElement(totales, "MntExe").text = str(total_valor)
+    SubElement(totales, "MntTotal").text = str(total_valor)
+
+    detalle = SubElement(doc, "Detalle")
+    SubElement(detalle, "NroLinDet").text = "1"
+    cdg_item = SubElement(detalle, "CdgItem")
+    SubElement(cdg_item, "TpoCodigo").text = "INT1"
+    SubElement(cdg_item, "VlrCodigo").text = "PE"
+    SubElement(detalle, "IndExe").text = "1"
+    SubElement(detalle, "NmbItem").text = "PRODUCTO EXENTO"
+    SubElement(detalle, "QtyItem").text = "1"
+    SubElement(detalle, "UnmdItem").text = "UN"
+    SubElement(detalle, "PrcItem").text = str(total_valor)
+    SubElement(detalle, "MontoItem").text = str(total_valor)
+
+    xml_string = tostring(root, encoding="utf-8", method="xml")
+
+    # Devolver XML como descarga
+    response = HttpResponse(xml_string, content_type='application/xml')
+    response['Content-Disposition'] = 'attachment; filename=DTE_factura_exenta.xml'
+    return response

@@ -1,0 +1,23 @@
+{% extends 'core/base.html' %}
+{% block title %}Resultado Prueba de Envío{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h3 class="mb-3">Resultado de la Prueba de Envío a facturacion.cl</h3>
+<a href="{% url 'probar_envio' %}" class="btn btn-warning btn-sm" target="_blank">
+  <i class="bi bi-download"></i> Descargar archivo DTE (Prueba)
+</a>
+
+  <div class="card">
+    <div class="card-body">
+      <pre style="font-family: monospace; white-space: pre-wrap;">
+{% for log in logs %}
+{{ log }}
+{% endfor %}
+      </pre>
+    </div>
+  </div>
+
+  <a href="{% url 'crear_certificado' %}" class="btn btn-secondary mt-3">← Volver</a>
+</div>
+{% endblock %}

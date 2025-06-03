@@ -178,6 +178,7 @@ class NotasNumeros(models.Model):
     notas = models.TextField()
 
 
+
 class Factura(models.Model):
     certificado = models.OneToOneField('CertificadoTransporte', on_delete=models.CASCADE, related_name='factura')
     numero = models.PositiveIntegerField(unique=True)
@@ -193,13 +194,24 @@ class Factura(models.Model):
     comuna = models.CharField(max_length=100)
     ciudad = models.CharField(max_length=100)
 
+    folio_sii = models.PositiveIntegerField(null=True, blank=True, unique=True)
     observaciones = models.TextField(blank=True, null=True)
+
     def save(self, *args, **kwargs):
-        # Antes de guardar, actualizamos valor_clp
         self.valor_clp = self.valor_usd * self.tipo_cambio
         super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Factura N° {self.numero} - Certificado C-{self.certificado.id}"
+
+# ✅ FUNCIÓN LIBRE (fuera del modelo)
+def obtener_siguiente_folio() -> int:
+    usados = Factura.objects.exclude(folio_sii__isnull=True).values_list('folio_sii', flat=True)
+    rango_disponible = range(521, 541)  # ← según CAF
+    for folio in rango_disponible:
+        if folio not in usados:
+            return folio
+    raise Exception("No hay folios disponibles")
     
 class Cobranza(models.Model):
     certificado = models.OneToOneField('CertificadoTransporte', on_delete=models.CASCADE, related_name='cobranza')

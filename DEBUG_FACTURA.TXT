@@ -1,8 +1,0 @@
-->EncabezadoCompra<-
-34;0;2025-05-25;78087058-3;Emilio Silva Hijos S.A.;ACTIVIDAD ECONÓMICA;Ruta 5 Norte 484 - La Serena;IV;La Serena;82.888.200-7;Emilio Silva Hijos S.A.;GIRO CLIENTE;Ruta 5 Norte 484 - La Serena;IV;La Serena;correo@cliente.cl
-->EncabezadoAdicional<-
-0;0;0;0;0;0
-->Totales<-
-0;19000;0;19000;0;0;0;0;
-->Detalle<-
-1;Seguro de Carga;Despacho Santiago - C-1 - PRIMA USD $20.00;1;UN;19000;19000;19000;;;

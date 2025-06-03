@@ -1,11 +1,11 @@
 import base64
-from zeep import Client
-from core.models import Factura
-from zeep.helpers import serialize_object
-import tempfile
 import os
+import re
 import sys
-
+from zeep import Client
+from zeep.helpers import serialize_object
+from core.models import Factura
+from lxml import etree
 # Configuración de conexión a facturacion.cl
 FACTURACION_WSDL = 'http://ws.facturacion.cl/WSDS/wsplano.asmx?wsdl'
 FACTURACION_USUARIO = 'SAFEYOURCARGOSPA'
@@ -13,65 +13,77 @@ FACTURACION_RUT = '78087058-3'
 FACTURACION_CLAVE = '818bb129c1'
 FACTURACION_PUERTO = '0'
 
+# 🔧 Limpieza de RUT para cumplir formato requerido
+def limpiar_rut(rut: str) -> str:
+    """
+    Elimina puntos y normaliza el formato del RUT chileno.
+    Ejemplo: '78.087.058-3' => '78087058-3'
+    """
+    rut = rut.replace(".", "").replace(" ", "").upper()
+    if "-" not in rut and len(rut) > 1:
+        return f"{rut[:-1]}-{rut[-1]}"
+    return rut
+
 # ------------------------------------------
-# 🧾 Generar archivo plano de BOLETA EXENTA (DTE 41)
+# 🧾 Generar archivo plano de FACTURA EXENTA (DTE 34)
 # ------------------------------------------
-def generar_txt_boleta_exenta(factura: Factura) -> str:
+def generar_txt_factura_exenta(factura: Factura) -> str:
     certificado = factura.certificado
     cliente = certificado.cliente
 
-    rut_emisor = "78087058-3"
-    rut_receptor = cliente.rut or "11111111-1"
+    # Datos del receptor
+    rut_receptor = limpiar_rut(cliente.rut or "11111111-1")
     nombre = cliente.nombre or "CLIENTE"
+    giro = "PARTICULAR"
     direccion = cliente.direccion or "SIN DIRECCION"
-    ciudad = cliente.ciudad or "SANTIAGO"
     comuna = cliente.region or "SANTIAGO"
-    correo = "correo@cliente.cl"
+    ciudad = cliente.ciudad or "SANTIAGO"
+    correo = cliente.correo or "correo@cliente.cl"
     fecha = factura.fecha_emision.strftime("%Y-%m-%d")
     valor = int(factura.valor_clp)
 
-    # Encabezado de la boleta
-    encabezado = f"41;0;{fecha};3;0;;;;{rut_emisor};{rut_receptor};{nombre};PARTICULAR;{direccion};{ciudad};{comuna};{correo};"
+    # ✅ ENCABEZADO
+    encabezado = f"34;0;{fecha};0;0;{rut_receptor};{nombre};{giro};{direccion};{comuna};{ciudad};{correo};"
 
-    # Totales
-    totales = f"0;{valor};0;{valor};0;0;0;0;"
+    # ✅ TOTALES
+    totales = f"0;0;0;0;0;{valor};0;0;{valor};0;0;"
 
-    # Detalle (11 campos exactos)
-    descripcion = f"Despacho {certificado.ruta.ciudad_destino or 'Destino'} - C-{certificado.id} - PRIMA USD ${factura.valor_usd}"
-    detalle = f"1;Seguro de Carga;{descripcion};1;1;{valor};{valor};{valor};INT1;UN;;"
+    # ✅ DETALLE
+    descripcion = f"Despacho {certificado.ruta.ciudad_destino or 'Destino'} - C-{certificado.id}"
+    desc_larga = f"Seguro de carga internacional - PRIMA USD ${factura.valor_usd}"
+    detalle = f"1;SEG001;Seguro de Carga;1;{valor};0;0;0;0;{valor};0;INT1;UN;{desc_larga};"
 
-    # Armar el archivo plano final
+    # ✅ FORMATO FINAL
     lineas = [
-        "->Boleta<-",
+        "->Encabezado<-",
         encabezado,
-        "->BoletaTotales<-",
+        "->Totales<-", 
         totales,
-        "->BoletaDetalle<-",
+        "->Detalle<-",
         detalle
     ]
 
     return "\r\n".join(lineas)
 
-
 # ------------------------------------------
-# 🚀 Emitir archivo TXT a facturacion.cl vía WebService
+# 🚀 Enviar archivo a facturacion.cl vía WebService
 # ------------------------------------------
-def emitir_boleta_facturacion_cl(factura: Factura) -> dict:
+def emitir_factura_exenta_cl(factura: Factura) -> dict:
     try:
-        txt_data = generar_txt_boleta_exenta(factura)
+        txt_data = generar_txt_factura_exenta(factura)
 
-        # Guardar archivo temporalmente en el escritorio para verificación
-        ruta_debug = os.path.join(os.path.expanduser("~"), "Desktop", "DEBUG_BOLETA.TXT")
+        # Guardar archivo temporal para debug
+        ruta_debug = os.path.join(os.path.expanduser("~"), "Desktop", "DEBUG_FACTURA.TXT")
         with open(ruta_debug, "w", encoding="latin-1", newline='\r\n') as f:
             f.write(txt_data)
 
         print(f"✅ Archivo de debug guardado en: {ruta_debug}")
 
-        # Codificar archivo a base64
+        # Codificar archivo en base64
         with open(ruta_debug, 'rb') as f:
             encoded_file = base64.b64encode(f.read()).decode()
 
-        # Construir login en base64
+        # Login codificado
         login_info = {
             'Usuario': base64.b64encode(FACTURACION_USUARIO.encode()).decode(),
             'Rut': base64.b64encode(FACTURACION_RUT.encode()).decode(),
@@ -80,15 +92,13 @@ def emitir_boleta_facturacion_cl(factura: Factura) -> dict:
             'IncluyeLink': "1"
         }
 
-        # Enviar al WebService
+        # Cliente SOAP
         client = Client(FACTURACION_WSDL)
         response = client.service.Procesar(login=login_info, file=encoded_file, formato="1")
 
-        # Mostrar resultados
+        # Log completo
         print("🧾 CONTENIDO DEL ARCHIVO DEBUG:", file=sys.stderr)
         print(txt_data, file=sys.stderr)
-        print("-" * 40)
-        print(txt_data)
         print("-" * 40)
         print("📦 XML devuelto por Facturacion.cl:")
         print(response)
@@ -99,9 +109,9 @@ def emitir_boleta_facturacion_cl(factura: Factura) -> dict:
         return {'success': False, 'error': str(e)}
 
 # ------------------------------------------
-# 🔗 Obtener el link oficial PDF desde Facturacion.cl
+# 🔗 Obtener el PDF oficial desde facturacion.cl
 # ------------------------------------------
-def obtener_link_pdf_boleta(folio: int, tipo_dte: int = 41) -> dict:
+def obtener_link_pdf_boleta(folio: int, tipo_dte: int = 34) -> dict:
     try:
         client = Client(FACTURACION_WSDL)
 
@@ -127,3 +137,66 @@ def obtener_link_pdf_boleta(folio: int, tipo_dte: int = 41) -> dict:
 
     except Exception as e:
         return {'success': False, 'error': str(e)}
+def normalizar_rut(rut: str) -> str:
+    """
+    Devuelve el RUT con guion y sin puntos. Ej: '60.905.000-K' -> '60905000-K'
+    """
+    rut = rut.replace(".", "").replace(" ", "").upper()
+    if "-" not in rut and len(rut) > 1:
+        return f"{rut[:-1]}-{rut[-1]}"
+    return rut
+
+def generar_xml_factura_exenta(factura: Factura) -> str:
+    certificado = factura.certificado
+    cliente = factura.certificado.cliente
+
+    # RUT limpio y normalizado
+    rut_limpio = "76000555-0"
+    cdg_int = "760005550"
+
+    root = etree.Element("DTE", version="1.0")
+    documento = etree.SubElement(root, "Documento", ID="F1T34")
+
+    # Encabezado
+    encabezado = etree.SubElement(documento, "Encabezado")
+    iddoc = etree.SubElement(encabezado, "IdDoc")
+    etree.SubElement(iddoc, "TipoDTE").text = "34"
+    etree.SubElement(iddoc, "Folio").text = str(factura.folio_sii)
+    etree.SubElement(iddoc, "FchEmis").text = factura.fecha_emision.strftime("%Y-%m-%d")
+
+    emisor = etree.SubElement(encabezado, "Emisor")
+    etree.SubElement(emisor, "RUTEmisor").text = "78087058-3"
+    etree.SubElement(emisor, "RznSoc").text = "SAFE YOUR CARGO"
+    etree.SubElement(emisor, "GiroEmis").text = "Servicios Logísticos"
+    etree.SubElement(emisor, "Acteco").text = "515009"
+    etree.SubElement(emisor, "DirOrigen").text = "Pedro de Valdivia 25"
+    etree.SubElement(emisor, "CmnaOrigen").text = "Providencia"
+    etree.SubElement(emisor, "CiudadOrigen").text = "Santiago"
+
+    receptor = etree.SubElement(encabezado, "Receptor")
+    etree.SubElement(receptor, "RUTRecep").text = "78087058-3"
+    etree.SubElement(receptor, "CdgIntRecep").text = "780870583"  # sin guión ni puntos
+    etree.SubElement(receptor, "RznSocRecep").text = "supercliente"
+    etree.SubElement(receptor, "GiroRecep").text = "PARTICULAR"
+    etree.SubElement(receptor, "DirRecep").text = "Agustinas 1234"
+    etree.SubElement(receptor, "CmnaRecep").text = "Santiago"
+    etree.SubElement(receptor, "CiudadRecep").text = "Santiago"
+
+    totales = etree.SubElement(encabezado, "Totales")
+    etree.SubElement(totales, "MntExe").text = str(int(factura.valor_clp))
+    etree.SubElement(totales, "MntTotal").text = str(int(factura.valor_clp))
+
+    # Detalle
+    detalle = etree.SubElement(documento, "Detalle")
+    etree.SubElement(detalle, "NroLinDet").text = "1"
+    cdgitem = etree.SubElement(detalle, "CdgItem")
+    etree.SubElement(cdgitem, "TpoCodigo").text = "INT1"
+    etree.SubElement(cdgitem, "VlrCodigo").text = "SEG001"
+    etree.SubElement(detalle, "IndExe").text = "1"
+    etree.SubElement(detalle, "NmbItem").text = "Seguro de Carga"
+    etree.SubElement(detalle, "QtyItem").text = "1"
+    etree.SubElement(detalle, "UnmdItem").text = "UN"
+    etree.SubElement(detalle, "PrcItem").text = str(int(factura.valor_clp))
+    etree.SubElement(detalle, "MontoItem").text = str(int(factura.valor_clp))
+
+    return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8")

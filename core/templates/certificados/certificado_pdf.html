@@ -112,7 +112,7 @@
   <div class="section-title">Transporte</div>
   <table>
     <tr><td><strong>Fecha Embarque:</strong> {{ certificado.fecha_partida }}</td><td><strong>Cláusula:</strong> Cláusula {{ certificado.metodo_embarque.clausula }}</td></tr>
-    <tr><td><strong>País Origen:</strong> {{ certificado.viaje.vuelo_origen_pais_fk.nombre }}</td><td><strong>Ciudad Origen:</strong> {{ certificado.viaje.vuelo_origen_ciudad }}</td></tr>
+    <tr><td><strong>Pais Origen:</strong> {{ certificado.viaje.vuelo_origen_pais }}</td><td><strong>Ciudad Origen:</strong> {{ certificado.viaje.vuelo_origen_ciudad }}</td></tr>
     <tr><td><strong>País Destino:</strong> {{ certificado.viaje.vuelo_destino_pais_fk.nombre }}</td><td><strong>Ciudad Destino:</strong> {{ certificado.viaje.vuelo_destino_ciudad }}</td></tr>
 <tr>
   <td><strong>Modo de Transporte:</strong> {{ certificado.metodo_embarque.modo_transporte }}</td>
@@ -160,10 +160,11 @@
     <tr><td><strong>Puerto Origen / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_origen }}</td><td><strong>Puerto Destino / Aeropuerto:</strong> {{ certificado.viaje.aeropuerto_destino }}</td></tr>
     <tr><td><strong>Nº Documento de Transporte:</strong> {{ certificado.viaje.numero_viaje }}</td><td><strong>Referencias:</strong> {{ certificado.notas.referencia }}</td></tr>
   </table>
-<div class="section-title">Nota de la Descripción de Carga</div>
+<div class="section-title">Notas</div>
 <p>
-<strong>Descripción de la carga:</strong> {{ certificado.viaje.descripcion_carga|default:"No especificada" }}
+<strong>Observaciones del cliente:</strong> {{ certificado.notas.notas|default:"No especificada" }}
 </p>
+
 
   <div class="section-title">Prima y Seguro</div>
   <table>
