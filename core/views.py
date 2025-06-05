@@ -32,8 +32,10 @@ logger = logging.getLogger(__name__)
 from django.contrib.auth import get_user_model
 import json
 from django.db.models import Q, Count, Sum
-from .utils import registrar_actividad
+from .utils import registrar_actividad, obtener_dolar_observado
 from xml.etree.ElementTree import Element, SubElement, tostring
+
+
 Usuario = get_user_model()
 
 @login_required
@@ -53,10 +55,10 @@ def dashboard(request):
     ultimos_certificados = []
 
     # Obtener tipo de cambio actual (USD a CLP)
-    try:
-        response = requests.get("https://mindicador.cl/api/dolar")
-        dolar = Decimal(str(response.json()['dolar']['valor']))
-    except Exception:
+    resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
+    if "valor" in resultado:
+        dolar = Decimal(resultado["valor"])
+    else:
         dolar = Decimal('950.00')
 
     if user.is_superuser or user.rol == "Administrador":
@@ -477,10 +479,10 @@ def crear_certificado(request):
 
             factura.valor_usd = certificado.tipo_mercancia.valor_prima
 
-            try:
-                response = requests.get("https://mindicador.cl/api/dolar")
-                dolar = Decimal(str(response.json()['dolar']['valor']))
-            except Exception:
+            resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
+            if "valor" in resultado:
+                dolar = Decimal(resultado["valor"])
+            else:
                 dolar = Decimal('950.00')
 
             factura.tipo_cambio = dolar
@@ -589,11 +591,12 @@ def factura_pdf(request, pk):
     factura.valor_usd = certificado.tipo_mercancia.valor_prima  # ✅ actualiza el valor prima real
 
     # Obtener tipo de cambio dinámico
-    try:
-        response = requests.get("https://mindicador.cl/api/dolar")
-        dolar = Decimal(str(response.json()['dolar']['valor']))
-    except Exception:
+    resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
+    if "valor" in resultado:
+        dolar = Decimal(resultado["valor"])
+    else:
         dolar = Decimal('950.00')
+
 
     # Calcular valor CLP
     factura.tipo_cambio = dolar
@@ -872,13 +875,12 @@ def probar_envio_factura(request):
         factura.valor_usd = certificado.tipo_mercancia.valor_prima
 
         # Obtener tipo de cambio actual
-        try:
-            response = requests.get("https://mindicador.cl/api/dolar")
-            dolar = Decimal(str(response.json()['dolar']['valor']))
-            logs.append(f"💱 Tipo de cambio obtenido: ${dolar}")
-        except Exception as e:
+        resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
+        if "valor" in resultado:
+            dolar = Decimal(resultado["valor"])
+        else:
             dolar = Decimal('950.00')
-            logs.append(f"⚠️ Error al obtener dólar. Usando default 950.00. Detalle: {e}")
+
 
         factura.tipo_cambio = dolar
         factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar

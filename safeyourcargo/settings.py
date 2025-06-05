@@ -117,3 +117,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Configuración por defecto del campo de clave primaria
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'core.Usuario'
+
+
+BCCH_USER = os.getenv("BCCH_USER")
+BCCH_PASS = os.getenv("BCCH_PASS")
