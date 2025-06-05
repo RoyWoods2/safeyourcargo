@@ -667,17 +667,7 @@ def generar_pdf_cobranza(request, certificado_id):
     response['Content-Disposition'] = f'inline; filename=cobranza_C{cobro.certificado.id}.pdf'
     return response
 
-def obtener_paises(request):
-    response = requests.get("https://restcountries.com/v3.1/all")
-    if response.ok:
-        data = response.json()
-        paises = sorted([{
-            "nombre": c["name"]["common"],
-            "codigo": c["cca2"],
-            "bandera": c["flags"]["svg"]
-        } for c in data], key=lambda x: x["nombre"])
-        return JsonResponse({"paises": paises})
-    return JsonResponse({"error": "No se pudieron obtener los países"}, status=500)
+
 
 
 @csrf_exempt
@@ -714,7 +704,8 @@ def obtener_aeropuertos(request):
     return JsonResponse({"error": "Método no permitido"}, status=405)
 
 def obtener_paises(request):
-    response = requests.get("https://restcountries.com/v3.1/all")
+    url = "https://restcountries.com/v3.1/all?fields=name,cca2,flags"
+    response = requests.get(url)
     if response.ok:
         data = response.json()
         paises = sorted([{
@@ -726,17 +717,16 @@ def obtener_paises(request):
     return JsonResponse({"error": "No se pudieron obtener los países"}, status=500)
 
 
+
 @csrf_exempt
 def obtener_ciudades(request):
     if request.method == "POST":
-        import json
         datos = json.loads(request.body)
         pais = datos.get("pais")
 
-        # 👉 La API externa espera GET, no POST
-        response = requests.get(
-            f"https://countriesnow.space/api/v0.1/countries/cities/q?country={pais}"
-        )
+        # API correcta: requiere POST con JSON {"country": "Chile"}
+        url = "https://countriesnow.space/api/v0.1/countries/cities"
+        response = requests.post(url, json={"country": pais})
 
         if response.ok:
             data = response.json()
