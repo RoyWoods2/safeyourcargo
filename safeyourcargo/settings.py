@@ -13,7 +13,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'reemplaza-esto-por-una-clave-s
 DEBUG = True
 
 # Hosts permitidos
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '64.227.29.217']
+ALLOWED_HOSTS = ['seguros.safeyourcargo.com','localhost', '127.0.0.1', '64.227.29.217']
 
 # Aplicaciones instaladas
 INSTALLED_APPS = [
