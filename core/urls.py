@@ -31,5 +31,5 @@ urlpatterns = [
     path('certificados/probar-envio-xml/', views.probar_envio, name='probar_envio'),
     path('api/buscar-aeronaves/', views.buscar_aeronaves, name='buscar_aeronaves'),
     path('api/buscar-navios/', views.buscar_navios, name='buscar_navios'),
-
+    path('api/buscar-transporte/', views.buscar_transporte, name='buscar_transporte'),
 ]

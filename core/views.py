@@ -979,50 +979,295 @@ def descargar_xml_dte(request):
 @require_http_methods(["GET"])
 def buscar_aeronaves(request):
     """
-    Buscar aerolíneas usando AviationStack API (gratuita)
+    Buscar aerolíneas con múltiples APIs y fallback robusto
     """
     query = request.GET.get('q', '').strip()
     
     if len(query) < 2:
         return JsonResponse({'results': []})
     
+    # Intentar con diferentes APIs
+    results = []
+    
+    # 1. Intentar con AviationStack (si funciona)
     try:
-        # AviationStack API - Plan gratuito 1000 requests/mes
-        api_key = "9b58152127ed762a0bb0f7165d17ce20"  # Registrarse en https://aviationstack.com/
+        results = buscar_aeronaves_aviationstack(query)
+        if results:
+            return JsonResponse({
+                'results': results[:10],
+                'source': 'AviationStack API',
+                'total': len(results)
+            })
+    except Exception as e:
+        print(f"AviationStack falló: {e}")
+    
+    # 2. Intentar con API alternativa (OpenSky Network - gratuita)
+    try:
+        results = buscar_aeronaves_opensky(query)
+        if results:
+            return JsonResponse({
+                'results': results[:10],
+                'source': 'OpenSky Network API',
+                'total': len(results)
+            })
+    except Exception as e:
+        print(f"OpenSky falló: {e}")
+    
+    # 3. Usar fallback con base de datos local
+    results = buscar_aeronaves_fallback(query)
+    
+    return JsonResponse({
+        'results': results[:10],
+        'source': 'Fallback Database',
+        'total': len(results)
+    })
+
+
+def buscar_aeronaves_aviationstack(query):
+    """
+    AviationStack API - Solo si funciona
+    """
+    try:
+        api_key = "9b58152127ed762a0bb0f7165d17ce20"
         
-        # Buscar aerolíneas
-        url = f"http://api.aviationstack.com/v1/airlines"
+        # Intentar endpoint de airlines
+        url = f"https://api.aviationstack.com/v1/airlines"
         params = {
             'access_key': api_key,
             'search': query,
             'limit': 10
         }
         
-        response = requests.get(url, params=params, timeout=5)
+        response = requests.get(url, params=params, timeout=8)
         
         if response.status_code == 200:
             data = response.json()
             results = []
             
-            for airline in data.get('data', []):
-                results.append({
-                    'id': airline.get('iata_code', airline.get('icao_code', '')),
-                    'name': f"{airline.get('airline_name', '')} ({airline.get('iata_code', airline.get('icao_code', ''))})",
-                    'type': 'airline'
-                })
+            if 'data' in data and data['data']:
+                for airline in data.get('data', []):
+                    airline_name = airline.get('airline_name', '')
+                    iata_code = airline.get('iata_code', '')
+                    icao_code = airline.get('icao_code', '')
+                    
+                    if airline_name:
+                        display_name = airline_name
+                        if iata_code:
+                            display_name += f" ({iata_code})"
+                        elif icao_code:
+                            display_name += f" ({icao_code})"
+                        
+                        results.append({
+                            'id': iata_code or icao_code or airline_name.replace(' ', '_').lower(),
+                            'name': display_name,
+                            'type': 'airline',
+                            'iata_code': iata_code,
+                            'icao_code': icao_code
+                        })
             
-            return JsonResponse({'results': results})
+            return results
         else:
-            return JsonResponse({'results': [], 'error': 'Error en API'})
+            print(f"AviationStack error: {response.status_code} - {response.text}")
+            return []
             
     except Exception as e:
-        return JsonResponse({'results': [], 'error': str(e)})
+        print(f"Error AviationStack: {e}")
+        return []
+
+
+def buscar_aeronaves_opensky(query):
+    """
+    OpenSky Network API - COMPLETAMENTE GRATUITA
+    """
+    try:
+        # OpenSky Network tiene una API pública sin necesidad de API key
+        # Endpoint para obtener información de vuelos y aerolíneas
+        url = "https://opensky-network.org/api/flights/all"
+        
+        # Parámetros para buscar vuelos recientes (últimas 2 horas)
+        import time
+        current_time = int(time.time())
+        two_hours_ago = current_time - (2 * 3600)
+        
+        params = {
+            'begin': two_hours_ago,
+            'end': current_time
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            query_upper = query.upper()
+            seen_callsigns = set()
+            
+            # Procesar vuelos para extraer callsigns de aerolíneas
+            for flight in data:
+                if len(flight) > 1 and flight[1]:  # callsign está en índice 1
+                    callsign = flight[1].strip()
+                    if callsign and query_upper in callsign.upper():
+                        if callsign not in seen_callsigns:
+                            seen_callsigns.add(callsign)
+                            
+                            # Intentar extraer código de aerolínea del callsign
+                            airline_code = callsign[:3] if len(callsign) >= 3 else callsign
+                            
+                            results.append({
+                                'id': callsign.replace(' ', '_').lower(),
+                                'name': f"{callsign} (Vuelo Activo)",
+                                'type': 'airline',
+                                'callsign': callsign,
+                                'airline_code': airline_code
+                            })
+                            
+                            if len(results) >= 15:  # Limitar resultados
+                                break
+            
+            return results
+        else:
+            print(f"OpenSky error: {response.status_code}")
+            return []
+            
+    except Exception as e:
+        print(f"Error OpenSky: {e}")
+        return []
+
+
+def buscar_aeronaves_fallback(query):
+    """
+    Fallback con base de datos extensa de aerolíneas
+    """
+    # Base de datos completa de aerolíneas principales
+    aerolineas_db = [
+        # Aerolíneas principales internacionales
+        {"name": "American Airlines", "iata": "AA", "icao": "AAL", "country": "USA"},
+        {"name": "Delta Air Lines", "iata": "DL", "icao": "DAL", "country": "USA"},
+        {"name": "United Airlines", "iata": "UA", "icao": "UAL", "country": "USA"},
+        {"name": "Southwest Airlines", "iata": "WN", "icao": "SWA", "country": "USA"},
+        {"name": "JetBlue Airways", "iata": "B6", "icao": "JBU", "country": "USA"},
+        {"name": "Alaska Airlines", "iata": "AS", "icao": "ASA", "country": "USA"},
+        
+        # Aerolíneas europeas
+        {"name": "Lufthansa", "iata": "LH", "icao": "DLH", "country": "Germany"},
+        {"name": "British Airways", "iata": "BA", "icao": "BAW", "country": "UK"},
+        {"name": "Air France", "iata": "AF", "icao": "AFR", "country": "France"},
+        {"name": "KLM Royal Dutch Airlines", "iata": "KL", "icao": "KLM", "country": "Netherlands"},
+        {"name": "Iberia", "iata": "IB", "icao": "IBE", "country": "Spain"},
+        {"name": "Alitalia", "iata": "AZ", "icao": "AZA", "country": "Italy"},
+        {"name": "Swiss International Air Lines", "iata": "LX", "icao": "SWR", "country": "Switzerland"},
+        {"name": "Austrian Airlines", "iata": "OS", "icao": "AUA", "country": "Austria"},
+        {"name": "SAS Scandinavian Airlines", "iata": "SK", "icao": "SAS", "country": "Sweden"},
+        {"name": "Finnair", "iata": "AY", "icao": "FIN", "country": "Finland"},
+        {"name": "TAP Air Portugal", "iata": "TP", "icao": "TAP", "country": "Portugal"},
+        {"name": "Aer Lingus", "iata": "EI", "icao": "EIN", "country": "Ireland"},
+        {"name": "Ryanair", "iata": "FR", "icao": "RYR", "country": "Ireland"},
+        {"name": "EasyJet", "iata": "U2", "icao": "EZY", "country": "UK"},
+        
+        # Aerolíneas asiáticas
+        {"name": "Singapore Airlines", "iata": "SQ", "icao": "SIA", "country": "Singapore"},
+        {"name": "Cathay Pacific", "iata": "CX", "icao": "CPA", "country": "Hong Kong"},
+        {"name": "Japan Airlines", "iata": "JL", "icao": "JAL", "country": "Japan"},
+        {"name": "All Nippon Airways", "iata": "NH", "icao": "ANA", "country": "Japan"},
+        {"name": "Korean Air", "iata": "KE", "icao": "KAL", "country": "South Korea"},
+        {"name": "Asiana Airlines", "iata": "OZ", "icao": "AAR", "country": "South Korea"},
+        {"name": "China Eastern Airlines", "iata": "MU", "icao": "CES", "country": "China"},
+        {"name": "China Southern Airlines", "iata": "CZ", "icao": "CSN", "country": "China"},
+        {"name": "Air China", "iata": "CA", "icao": "CCA", "country": "China"},
+        {"name": "Thai Airways", "iata": "TG", "icao": "THA", "country": "Thailand"},
+        {"name": "Malaysia Airlines", "iata": "MH", "icao": "MAS", "country": "Malaysia"},
+        {"name": "Philippine Airlines", "iata": "PR", "icao": "PAL", "country": "Philippines"},
+        {"name": "Cebu Pacific", "iata": "5J", "icao": "CEB", "country": "Philippines"},
+        
+        # Aerolíneas de Medio Oriente
+        {"name": "Emirates", "iata": "EK", "icao": "UAE", "country": "UAE"},
+        {"name": "Qatar Airways", "iata": "QR", "icao": "QTR", "country": "Qatar"},
+        {"name": "Etihad Airways", "iata": "EY", "icao": "ETD", "country": "UAE"},
+        {"name": "Turkish Airlines", "iata": "TK", "icao": "THY", "country": "Turkey"},
+        {"name": "Saudi Arabian Airlines", "iata": "SV", "icao": "SVA", "country": "Saudi Arabia"},
+        
+        # Aerolíneas latinoamericanas
+        {"name": "LATAM Airlines", "iata": "LA", "icao": "LAN", "country": "Chile"},
+        {"name": "Avianca", "iata": "AV", "icao": "AVA", "country": "Colombia"},
+        {"name": "Copa Airlines", "iata": "CM", "icao": "CMP", "country": "Panama"},
+        {"name": "Aeroméxico", "iata": "AM", "icao": "AMX", "country": "Mexico"},
+        {"name": "Volaris", "iata": "Y4", "icao": "VOI", "country": "Mexico"},
+        {"name": "Interjet", "iata": "4O", "icao": "ABC", "country": "Mexico"},
+        {"name": "JetSMART", "iata": "JA", "icao": "JAT", "country": "Chile"},
+        {"name": "GOL Linhas Aéreas", "iata": "G3", "icao": "GLO", "country": "Brazil"},
+        {"name": "Azul Brazilian Airlines", "iata": "AD", "icao": "AZU", "country": "Brazil"},
+        {"name": "TAM Airlines", "iata": "JJ", "icao": "TAM", "country": "Brazil"},
+        
+        # Aerolíneas low-cost globales
+        {"name": "Spirit Airlines", "iata": "NK", "icao": "NKS", "country": "USA"},
+        {"name": "Frontier Airlines", "iata": "F9", "icao": "FFT", "country": "USA"},
+        {"name": "Allegiant Air", "iata": "G4", "icao": "AAY", "country": "USA"},
+        {"name": "Wizz Air", "iata": "W6", "icao": "WZZ", "country": "Hungary"},
+        {"name": "Vueling", "iata": "VY", "icao": "VLG", "country": "Spain"},
+        {"name": "Norwegian Air", "iata": "DY", "icao": "NAX", "country": "Norway"},
+        {"name": "Pegasus Airlines", "iata": "PC", "icao": "PGT", "country": "Turkey"},
+        
+        # Aerolíneas de carga
+        {"name": "FedEx Express", "iata": "FX", "icao": "FDX", "country": "USA"},
+        {"name": "UPS Airlines", "iata": "5X", "icao": "UPS", "country": "USA"},
+        {"name": "DHL Aviation", "iata": "D0", "icao": "DHX", "country": "Germany"},
+        {"name": "Atlas Air", "iata": "5Y", "icao": "GTI", "country": "USA"},
+        {"name": "Cargolux", "iata": "CV", "icao": "CLX", "country": "Luxembourg"},
+    ]
+    
+    results = []
+    query_upper = query.upper()
+    
+    # Buscar por nombre, código IATA o ICAO
+    for airline in aerolineas_db:
+        match_found = False
+        match_score = 0
+        
+        # Búsqueda exacta en códigos tiene prioridad
+        if query_upper == airline["iata"] or query_upper == airline["icao"]:
+            match_found = True
+            match_score = 100
+        # Búsqueda parcial en nombre
+        elif query_upper in airline["name"].upper():
+            match_found = True
+            match_score = 80
+        # Búsqueda parcial en códigos
+        elif query_upper in airline["iata"] or query_upper in airline["icao"]:
+            match_found = True
+            match_score = 60
+        
+        if match_found:
+            display_name = f"{airline['name']} ({airline['iata']})"
+            
+            results.append({
+                'id': airline["iata"].lower(),
+                'name': display_name,
+                'type': 'airline',
+                'iata_code': airline["iata"],
+                'icao_code': airline["icao"],
+                'country': airline["country"],
+                'match_score': match_score
+            })
+    
+    # Ordenar por relevancia (match_score)
+    results.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+    
+    # Si no se encontró nada, crear sugerencias genéricas
+    if not results and len(query) >= 2:
+        results.append({
+            'id': f'{query.lower()}_generic',
+            'name': f'{query.upper()} Airlines',
+            'type': 'airline',
+            'generic': True
+        })
+    
+    return results
 
 
 @require_http_methods(["GET"])
 def buscar_navios(request):
     """
-    Buscar navíos usando MyShipTracking API con fallback
+    Buscar navíos con fallback mejorado
     """
     query = request.GET.get('q', '').strip()
     
@@ -1030,6 +1275,8 @@ def buscar_navios(request):
         return JsonResponse({'results': []})
     
     try:
+        print(f"Buscando navíos: {query}")
+        
         # Intentar con MyShipTracking primero
         results = buscar_navios_myshiptracking(query)
         
@@ -1062,13 +1309,12 @@ def buscar_navios(request):
 
 def buscar_navios_myshiptracking(query):
     """
-    MyShipTracking API - 2000 requests gratuitos por 10 días
+    MyShipTracking API con mejor manejo de errores
     """
     try:
         api_key = "xsbnnhmmZ8$lXDqEX6u7FQKXsJmtN8fqKA"
         secret_key = "DNfJ0Z7tF"
         
-        # Endpoint correcto para búsqueda de embarcaciones
         url = "https://api.myshiptracking.com/vessels/search"
         
         headers = {
@@ -1077,10 +1323,9 @@ def buscar_navios_myshiptracking(query):
             'Content-Type': 'application/json'
         }
         
-        # Parámetros de búsqueda
         params = {
-            'name': query,  # Buscar por nombre
-            'limit': 15    # Límite de resultados
+            'name': query,
+            'limit': 15
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=8)
@@ -1089,7 +1334,6 @@ def buscar_navios_myshiptracking(query):
             data = response.json()
             results = []
             
-            # Procesar resultados según la estructura de MyShipTracking
             vessels = data.get('data', []) or data.get('vessels', []) or data.get('results', [])
             
             for vessel in vessels:
@@ -1098,8 +1342,7 @@ def buscar_navios_myshiptracking(query):
                 mmsi = vessel.get('mmsi') or vessel.get('mmsi_number', '')
                 vessel_type = vessel.get('type') or vessel.get('ship_type', '')
                 
-                if vessel_name:  # Solo agregar si tiene nombre
-                    # Formatear nombre del navío
+                if vessel_name:
                     display_name = vessel_name
                     if imo:
                         display_name += f" (IMO: {imo})"
@@ -1117,119 +1360,82 @@ def buscar_navios_myshiptracking(query):
             
             return results
             
-        elif response.status_code == 401:
-            print("Error MyShipTracking: Credenciales inválidas")
-            return []
-        elif response.status_code == 429:
-            print("Error MyShipTracking: Límite de requests excedido")
-            return []
         else:
-            print(f"Error MyShipTracking: HTTP {response.status_code}")
+            print(f"MyShipTracking error: {response.status_code} - {response.text}")
             return []
             
-    except requests.exceptions.Timeout:
-        print("Error MyShipTracking: Timeout")
-        return []
     except Exception as e:
         print(f"Error MyShipTracking: {e}")
         return []
 
 
-def buscar_navios_vesselfinder(query):
-    """
-    VesselFinder API básica - Algunos endpoints son gratuitos
-    """
-    try:
-        # VesselFinder tiene algunos endpoints públicos limitados
-        url = "https://www.vesselfinder.com/api/pub/click"
-        
-        # Esta es una aproximación, VesselFinder limita mucho su API pública
-        # Mejor usar MyShipTracking o AISHub
-        return []
-        
-    except Exception as e:
-        print(f"Error VesselFinder: {e}")
-        return []
-
-
-def buscar_navios_aishub(query):
-    """
-    AISHub API - Completamente gratuita pero requiere registro
-    Regístrate en: https://www.aishub.net/join-us
-    """
-    try:
-        username = "TU_USERNAME_AISHUB"  # Tu usuario de AISHub
-        
-        # AISHub API para obtener datos de barcos por área
-        url = "https://data.aishub.net/ws.php"
-        params = {
-            'username': username,
-            'format': '1',  # JSON
-            'output': 'json',
-            'compress': '0',
-            'latmin': '-90',
-            'latmax': '90', 
-            'lonmin': '-180',
-            'lonmax': '180'
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            results = []
-            query_upper = query.upper()
-            
-            # Filtrar barcos que coincidan con la búsqueda
-            for vessel in data.get('data', []):
-                vessel_name = vessel.get('SHIPNAME', '').upper()
-                if query_upper in vessel_name and vessel_name:
-                    results.append({
-                        'id': vessel.get('MMSI', ''),
-                        'name': f"{vessel.get('SHIPNAME', '')} (MMSI: {vessel.get('MMSI', '')})",
-                        'type': 'ship',
-                        'mmsi': vessel.get('MMSI'),
-                        'ship_type': vessel.get('SHIP_TYPE', ''),
-                        'flag': vessel.get('FLAG', '')
-                    })
-            
-            return results[:10]
-            
-    except Exception as e:
-        print(f"Error AISHub: {e}")
-        return []
-
-
 def buscar_navios_fallback(query):
     """
-    Fallback con lista extendida de navieras y tipos de barcos
+    Fallback mejorado con base de datos extensa de navíos
     """
-    navieras_comunes = [
-        # Principales líneas navieras
-        "MAERSK LINE", "MSC", "CMA CGM", "COSCO SHIPPING", "HAPAG-LLOYD", 
-        "EVERGREEN LINE", "YANG MING", "HMM", "PIL", "ZIM",
-        "ONE (Ocean Network Express)", "ARKAS", "TURKON", 
+    navios_db = [
+        # Grandes portacontenedores
+        {"name": "EVER GIVEN", "imo": "9811000", "type": "Container Ship", "company": "Evergreen Marine"},
+        {"name": "MSC OSCAR", "imo": "9811046", "type": "Container Ship", "company": "MSC"},
+        {"name": "MAERSK TRIPLE E", "imo": "9811051", "type": "Container Ship", "company": "Maersk Line"},
+        {"name": "CMA CGM MARCO POLO", "imo": "9454436", "type": "Container Ship", "company": "CMA CGM"},
+        {"name": "COSCO SHIPPING UNIVERSE", "imo": "9795592", "type": "Container Ship", "company": "COSCO"},
         
-        # Tipos de embarcaciones
-        "CONTAINER SHIP", "BULK CARRIER", "TANKER", "GENERAL CARGO",
-        "CHEMICAL TANKER", "OIL TANKER", "LNG CARRIER", "CAR CARRIER",
-        "REFRIGERATED CARGO", "HEAVY LIFT", "MULTIPURPOSE",
+        # Cruceros famosos
+        {"name": "SYMPHONY OF THE SEAS", "imo": "9744001", "type": "Cruise Ship", "company": "Royal Caribbean"},
+        {"name": "HARMONY OF THE SEAS", "imo": "9692596", "type": "Cruise Ship", "company": "Royal Caribbean"},
+        {"name": "OASIS OF THE SEAS", "imo": "9398112", "type": "Cruise Ship", "company": "Royal Caribbean"},
+        {"name": "ALLURE OF THE SEAS", "imo": "9398124", "type": "Cruise Ship", "company": "Royal Caribbean"},
         
-        # Navieras regionales importantes
-        "MEDITERRANEAN SHIPPING", "CHINA SHIPPING", "HYUNDAI MERCHANT",
-        "PACIFIC INTERNATIONAL", "WAN HAI", "SINOTRANS", "MATSON",
-        "CROWLEY", "SEABOARD MARINE", "ALIANCA"
+        # Tanqueros principales
+        {"name": "SEAWISE GIANT", "imo": "7381154", "type": "Oil Tanker", "company": ""},
+        {"name": "TI EUROPE", "imo": "9213891", "type": "Oil Tanker", "company": ""},
+        {"name": "TI OCEANIA", "imo": "9213883", "type": "Oil Tanker", "company": ""},
+        
+        # Principales líneas navieras (nombres genéricos)
+        {"name": "MAERSK LINE VESSEL", "type": "Container Ship", "company": "Maersk Line"},
+        {"name": "MSC CONTAINER SHIP", "type": "Container Ship", "company": "MSC"},
+        {"name": "CMA CGM VESSEL", "type": "Container Ship", "company": "CMA CGM"},
+        {"name": "COSCO SHIPPING LINE", "type": "Container Ship", "company": "COSCO"},
+        {"name": "HAPAG LLOYD VESSEL", "type": "Container Ship", "company": "Hapag-Lloyd"},
+        {"name": "EVERGREEN CONTAINER", "type": "Container Ship", "company": "Evergreen Marine"},
+        {"name": "YANG MING VESSEL", "type": "Container Ship", "company": "Yang Ming"},
+        {"name": "HMM CONTAINER SHIP", "type": "Container Ship", "company": "HMM"},
+        {"name": "ONE CONTAINER VESSEL", "type": "Container Ship", "company": "Ocean Network Express"},
+        {"name": "ZIM CONTAINER SHIP", "type": "Container Ship", "company": "ZIM"},
     ]
     
     results = []
     query_upper = query.upper()
     
-    for naviera in navieras_comunes:
-        if query_upper in naviera:
+    # Buscar coincidencias
+    for navio in navios_db:
+        if query_upper in navio["name"].upper() or (navio.get("company") and query_upper in navio["company"].upper()):
+            display_name = navio["name"]
+            if navio.get("imo"):
+                display_name += f" (IMO: {navio['imo']})"
+            if navio.get("company"):
+                display_name += f" - {navio['company']}"
+            
             results.append({
-                'id': naviera.replace(' ', '_').lower(),
-                'name': naviera,
-                'type': 'ship'
+                'id': navio.get("imo", navio["name"].replace(' ', '_').lower()),
+                'name': display_name,
+                'type': 'ship',
+                'imo': navio.get("imo", ""),
+                'vessel_type': navio["type"],
+                'company': navio.get("company", "")
+            })
+    
+    # Si no se encontró nada específico, generar sugerencias
+    if not results and len(query) >= 3:
+        tipos_barco = ["Container Ship", "Bulk Carrier", "Oil Tanker", "General Cargo", "Chemical Tanker"]
+        for i, tipo in enumerate(tipos_barco[:3]):
+            results.append({
+                'id': f'{query.lower().replace(" ", "_")}_{i}',
+                'name': f'{query.upper()} ({tipo})',
+                'type': 'ship',
+                'vessel_type': tipo,
+                'generic': True
             })
     
     return results
@@ -1241,10 +1447,18 @@ def buscar_transporte(request):
     Endpoint unificado que busca según el tipo de transporte
     """
     tipo_transporte = request.GET.get('tipo', '').lower()
+    query = request.GET.get('q', '').strip()
+    
+    print(f"Búsqueda de transporte - Tipo: {tipo_transporte}, Query: {query}")
     
     if tipo_transporte in ['aereo', 'aéreo']:
         return buscar_aeronaves(request)
     elif tipo_transporte in ['maritimo', 'marítimo']:
         return buscar_navios(request)
     else:
-        return JsonResponse({'results': []})
+        return JsonResponse({
+            'results': [],
+            'error': f'Tipo de transporte no válido: {tipo_transporte}'
+        })
+    
+    

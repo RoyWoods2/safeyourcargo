@@ -429,11 +429,22 @@ document.getElementById("form-certificado").addEventListener("submit", function 
     })
 });
 </script>
-// Agregar este JavaScript a tu template
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const modo = document.getElementById("modoTransporte");
-  const nombreTransporteInput = document.getElementById("{{ viaje_form.nombre_avion.id_for_label }}");
+  // Buscar el input de nombre de transporte de varias formas posibles
+  const nombreTransporteInput = document.getElementById("{{ viaje_form.nombre_avion.id_for_label }}") || 
+                                document.querySelector("input[name*='nombre_avion']") ||
+                                document.querySelector("input[name*='nombre_transporte']") ||
+                                document.querySelector("#id_nombre_avion");
+  // Verificar que el input existe antes de continuar
+  if (!nombreTransporteInput) {
+    console.error("No se encontró el input de nombre de transporte");
+    return;
+  }
+  
+  console.log("Input de transporte encontrado:", nombreTransporteInput.id || nombreTransporteInput.name);
+  
   const labelTransporte = document.getElementById("label_nombre_transporte");
   
   // Crear elementos para autocomplete
@@ -582,9 +593,7 @@ document.addEventListener("DOMContentLoaded", function () {
     selectedIndex = -1;
   }
 
-  // Búsqueda en API
-  let timeoutId = null;
-  
+  // Buscar transporte en API con mejor debugging
   function buscarTransporte(query) {
     if (query.length < 2) {
       cerrarAutocomplete();
@@ -592,6 +601,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     
     const tipoTransporte = modo.value.toLowerCase();
+    console.log("Buscando:", query, "Tipo:", tipoTransporte);
     
     // Solo buscar para aéreo y marítimo
     if (!['aereo', 'maritimo'].includes(tipoTransporte)) {
@@ -599,11 +609,21 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
     
-    fetch(`/api/buscar-transporte/?tipo=${tipoTransporte}&q=${encodeURIComponent(query)}`)
-      .then(response => response.json())
+    const url = `/api/buscar-transporte/?tipo=${tipoTransporte}&q=${encodeURIComponent(query)}`;
+    console.log("URL de búsqueda:", url);
+    
+    fetch(url)
+      .then(response => {
+        console.log("Response status:", response.status);
+        return response.json();
+      })
       .then(data => {
-        if (data.results) {
+        console.log("Datos recibidos:", data);
+        if (data.results && data.results.length > 0) {
           mostrarResultados(data.results);
+        } else {
+          console.log("No se encontraron resultados");
+          cerrarAutocomplete();
         }
       })
       .catch(error => {
@@ -612,50 +632,55 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
-  // Event Listeners
+  // Event Listeners con verificación
   modo.addEventListener("change", actualizarVistaEmbalaje);
   tipoEmbalajeAereo?.addEventListener("change", actualizarVistaEmbalaje);
   embalajeMaritimo?.addEventListener("change", actualizarVistaEmbalaje);
   embalajeLCL?.addEventListener("change", actualizarVistaEmbalaje);
   tipoEmbalajeTerrestre?.addEventListener("change", actualizarVistaEmbalaje);
 
-  // Autocomplete event listeners
-  nombreTransporteInput.addEventListener('input', function(e) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      buscarTransporte(e.target.value);
-    }, 300); // Debounce de 300ms
-  });
+  // Variable para timeout
+  let timeoutId = null;
 
-  nombreTransporteInput.addEventListener('keydown', function(e) {
-    if (!autocompleteContainer || autocompleteContainer.style.display === 'none') return;
-    
-    switch(e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, currentResults.length - 1);
-        actualizarSeleccion();
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        selectedIndex = Math.max(selectedIndex - 1, -1);
-        actualizarSeleccion();
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0 && currentResults[selectedIndex]) {
-          seleccionarItem(currentResults[selectedIndex]);
-        }
-        break;
-      case 'Escape':
-        cerrarAutocomplete();
-        break;
-    }
-  });
+  // Autocomplete event listeners
+  if (nombreTransporteInput) {
+    nombreTransporteInput.addEventListener('input', function(e) {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        buscarTransporte(e.target.value);
+      }, 300); // Debounce de 300ms
+    });
+
+    nombreTransporteInput.addEventListener('keydown', function(e) {
+      if (!autocompleteContainer || autocompleteContainer.style.display === 'none') return;
+      
+      switch(e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          selectedIndex = Math.min(selectedIndex + 1, currentResults.length - 1);
+          actualizarSeleccion();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          selectedIndex = Math.max(selectedIndex - 1, -1);
+          actualizarSeleccion();
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (selectedIndex >= 0 && currentResults[selectedIndex]) {
+            seleccionarItem(currentResults[selectedIndex]);
+          }
+          break;
+        case 'Escape':
+          cerrarAutocomplete();
+          break;
+      }
+    });
+  }
 
   // Cerrar autocomplete al hacer click fuera
   document.addEventListener('click', function(e) {
-    if (!nombreTransporteInput.contains(e.target) && 
+    if (nombreTransporteInput && !nombreTransporteInput.contains(e.target) && 
         (!autocompleteContainer || !autocompleteContainer.contains(e.target))) {
       cerrarAutocomplete();
     }
