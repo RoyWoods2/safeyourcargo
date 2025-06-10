@@ -34,7 +34,7 @@ import json
 from django.db.models import Q, Count, Sum
 from .utils import registrar_actividad, obtener_dolar_observado
 from xml.etree.ElementTree import Element, SubElement, tostring
-
+from django.views.decorators.http import require_http_methods
 
 Usuario = get_user_model()
 
@@ -973,3 +973,278 @@ def descargar_xml_dte(request):
     response = HttpResponse(xml_string, content_type='application/xml')
     response['Content-Disposition'] = 'attachment; filename=DTE_factura_exenta.xml'
     return response
+
+
+
+@require_http_methods(["GET"])
+def buscar_aeronaves(request):
+    """
+    Buscar aerolíneas usando AviationStack API (gratuita)
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return JsonResponse({'results': []})
+    
+    try:
+        # AviationStack API - Plan gratuito 1000 requests/mes
+        api_key = "9b58152127ed762a0bb0f7165d17ce20"  # Registrarse en https://aviationstack.com/
+        
+        # Buscar aerolíneas
+        url = f"http://api.aviationstack.com/v1/airlines"
+        params = {
+            'access_key': api_key,
+            'search': query,
+            'limit': 10
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            
+            for airline in data.get('data', []):
+                results.append({
+                    'id': airline.get('iata_code', airline.get('icao_code', '')),
+                    'name': f"{airline.get('airline_name', '')} ({airline.get('iata_code', airline.get('icao_code', ''))})",
+                    'type': 'airline'
+                })
+            
+            return JsonResponse({'results': results})
+        else:
+            return JsonResponse({'results': [], 'error': 'Error en API'})
+            
+    except Exception as e:
+        return JsonResponse({'results': [], 'error': str(e)})
+
+
+@require_http_methods(["GET"])
+def buscar_navios(request):
+    """
+    Buscar navíos usando MyShipTracking API con fallback
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 3:
+        return JsonResponse({'results': []})
+    
+    try:
+        # Intentar con MyShipTracking primero
+        results = buscar_navios_myshiptracking(query)
+        
+        if results:
+            return JsonResponse({
+                'results': results[:10],
+                'source': 'MyShipTracking API',
+                'total': len(results)
+            })
+        
+        # Si no hay resultados de la API, usar fallback
+        results = buscar_navios_fallback(query)
+        
+        return JsonResponse({
+            'results': results[:10],
+            'source': 'Fallback Database',
+            'total': len(results)
+        })
+        
+    except Exception as e:
+        print(f"Error general en buscar_navios: {e}")
+        # En caso de error, usar fallback
+        results = buscar_navios_fallback(query)
+        return JsonResponse({
+            'results': results[:10],
+            'source': 'Fallback (Error)',
+            'error': str(e)
+        })
+
+
+def buscar_navios_myshiptracking(query):
+    """
+    MyShipTracking API - 2000 requests gratuitos por 10 días
+    """
+    try:
+        api_key = "xsbnnhmmZ8$lXDqEX6u7FQKXsJmtN8fqKA"
+        secret_key = "DNfJ0Z7tF"
+        
+        # Endpoint correcto para búsqueda de embarcaciones
+        url = "https://api.myshiptracking.com/vessels/search"
+        
+        headers = {
+            'X-API-Key': api_key,
+            'X-Secret-Key': secret_key,
+            'Content-Type': 'application/json'
+        }
+        
+        # Parámetros de búsqueda
+        params = {
+            'name': query,  # Buscar por nombre
+            'limit': 15    # Límite de resultados
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=8)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            
+            # Procesar resultados según la estructura de MyShipTracking
+            vessels = data.get('data', []) or data.get('vessels', []) or data.get('results', [])
+            
+            for vessel in vessels:
+                vessel_name = vessel.get('name') or vessel.get('ship_name') or vessel.get('vessel_name', '')
+                imo = vessel.get('imo') or vessel.get('imo_number', '')
+                mmsi = vessel.get('mmsi') or vessel.get('mmsi_number', '')
+                vessel_type = vessel.get('type') or vessel.get('ship_type', '')
+                
+                if vessel_name:  # Solo agregar si tiene nombre
+                    # Formatear nombre del navío
+                    display_name = vessel_name
+                    if imo:
+                        display_name += f" (IMO: {imo})"
+                    elif mmsi:
+                        display_name += f" (MMSI: {mmsi})"
+                    
+                    results.append({
+                        'id': imo or mmsi or vessel_name.replace(' ', '_').lower(),
+                        'name': display_name,
+                        'type': 'ship',
+                        'imo': imo,
+                        'mmsi': mmsi,
+                        'vessel_type': vessel_type
+                    })
+            
+            return results
+            
+        elif response.status_code == 401:
+            print("Error MyShipTracking: Credenciales inválidas")
+            return []
+        elif response.status_code == 429:
+            print("Error MyShipTracking: Límite de requests excedido")
+            return []
+        else:
+            print(f"Error MyShipTracking: HTTP {response.status_code}")
+            return []
+            
+    except requests.exceptions.Timeout:
+        print("Error MyShipTracking: Timeout")
+        return []
+    except Exception as e:
+        print(f"Error MyShipTracking: {e}")
+        return []
+
+
+def buscar_navios_vesselfinder(query):
+    """
+    VesselFinder API básica - Algunos endpoints son gratuitos
+    """
+    try:
+        # VesselFinder tiene algunos endpoints públicos limitados
+        url = "https://www.vesselfinder.com/api/pub/click"
+        
+        # Esta es una aproximación, VesselFinder limita mucho su API pública
+        # Mejor usar MyShipTracking o AISHub
+        return []
+        
+    except Exception as e:
+        print(f"Error VesselFinder: {e}")
+        return []
+
+
+def buscar_navios_aishub(query):
+    """
+    AISHub API - Completamente gratuita pero requiere registro
+    Regístrate en: https://www.aishub.net/join-us
+    """
+    try:
+        username = "TU_USERNAME_AISHUB"  # Tu usuario de AISHub
+        
+        # AISHub API para obtener datos de barcos por área
+        url = "https://data.aishub.net/ws.php"
+        params = {
+            'username': username,
+            'format': '1',  # JSON
+            'output': 'json',
+            'compress': '0',
+            'latmin': '-90',
+            'latmax': '90', 
+            'lonmin': '-180',
+            'lonmax': '180'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            query_upper = query.upper()
+            
+            # Filtrar barcos que coincidan con la búsqueda
+            for vessel in data.get('data', []):
+                vessel_name = vessel.get('SHIPNAME', '').upper()
+                if query_upper in vessel_name and vessel_name:
+                    results.append({
+                        'id': vessel.get('MMSI', ''),
+                        'name': f"{vessel.get('SHIPNAME', '')} (MMSI: {vessel.get('MMSI', '')})",
+                        'type': 'ship',
+                        'mmsi': vessel.get('MMSI'),
+                        'ship_type': vessel.get('SHIP_TYPE', ''),
+                        'flag': vessel.get('FLAG', '')
+                    })
+            
+            return results[:10]
+            
+    except Exception as e:
+        print(f"Error AISHub: {e}")
+        return []
+
+
+def buscar_navios_fallback(query):
+    """
+    Fallback con lista extendida de navieras y tipos de barcos
+    """
+    navieras_comunes = [
+        # Principales líneas navieras
+        "MAERSK LINE", "MSC", "CMA CGM", "COSCO SHIPPING", "HAPAG-LLOYD", 
+        "EVERGREEN LINE", "YANG MING", "HMM", "PIL", "ZIM",
+        "ONE (Ocean Network Express)", "ARKAS", "TURKON", 
+        
+        # Tipos de embarcaciones
+        "CONTAINER SHIP", "BULK CARRIER", "TANKER", "GENERAL CARGO",
+        "CHEMICAL TANKER", "OIL TANKER", "LNG CARRIER", "CAR CARRIER",
+        "REFRIGERATED CARGO", "HEAVY LIFT", "MULTIPURPOSE",
+        
+        # Navieras regionales importantes
+        "MEDITERRANEAN SHIPPING", "CHINA SHIPPING", "HYUNDAI MERCHANT",
+        "PACIFIC INTERNATIONAL", "WAN HAI", "SINOTRANS", "MATSON",
+        "CROWLEY", "SEABOARD MARINE", "ALIANCA"
+    ]
+    
+    results = []
+    query_upper = query.upper()
+    
+    for naviera in navieras_comunes:
+        if query_upper in naviera:
+            results.append({
+                'id': naviera.replace(' ', '_').lower(),
+                'name': naviera,
+                'type': 'ship'
+            })
+    
+    return results
+
+
+@require_http_methods(["GET"])
+def buscar_transporte(request):
+    """
+    Endpoint unificado que busca según el tipo de transporte
+    """
+    tipo_transporte = request.GET.get('tipo', '').lower()
+    
+    if tipo_transporte in ['aereo', 'aéreo']:
+        return buscar_aeronaves(request)
+    elif tipo_transporte in ['maritimo', 'marítimo']:
+        return buscar_navios(request)
+    else:
+        return JsonResponse({'results': []})

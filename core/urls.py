@@ -29,5 +29,7 @@ urlpatterns = [
     path("logs-actividad/", views.obtener_logs_actividad, name="logs_actividad"),
     path('certificados/probar-envio/', views.probar_envio_factura, name='probar_envio_factura'),
     path('certificados/probar-envio-xml/', views.probar_envio, name='probar_envio'),
+    path('api/buscar-aeronaves/', views.buscar_aeronaves, name='buscar_aeronaves'),
+    path('api/buscar-navios/', views.buscar_navios, name='buscar_navios'),
 
 ]

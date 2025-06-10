@@ -429,15 +429,22 @@ document.getElementById("form-certificado").addEventListener("submit", function 
     })
 });
 </script>
+// Agregar este JavaScript a tu template
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const modo = document.getElementById("modoTransporte");
-
+  const nombreTransporteInput = document.getElementById("{{ viaje_form.nombre_avion.id_for_label }}");
+  const labelTransporte = document.getElementById("label_nombre_transporte");
+  
+  // Crear elementos para autocomplete
+  let autocompleteContainer = null;
+  let currentResults = [];
+  let selectedIndex = -1;
+  
   // AÉREO
   const grupoAereo = document.getElementById("grupo_embalaje_aereo");
   const tipoEmbalajeAereo = document.getElementById("tipoEmbalajeAereo");
   const grupoOtroAereo = document.getElementById("grupo_otro_embalaje_aereo");
-
   // MARÍTIMO
   const grupoMaritimo = document.getElementById("grupo_embalaje_maritimo");
   const embalajeMaritimo = document.getElementById("embalajeMaritimo");
@@ -446,7 +453,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const grupoEmbalajeLCL = document.getElementById("grupo_tipo_embalaje_maritimo_lcl");
   const embalajeLCL = document.getElementById("tipoEmbalajeLCL");
   const grupoOtroLCL = document.getElementById("grupo_otro_embalaje_lcl");
-
   // TERRESTRE
   const grupoTerrestre = document.getElementById("grupo_embalaje_terrestre");
   const tipoEmbalajeTerrestre = document.getElementById("tipoEmbalajeTerrestre");
@@ -454,19 +460,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function actualizarVistaEmbalaje() {
     const valorModo = modo.value;
-
     // Reset
     [grupoAereo, grupoOtroAereo, grupoMaritimo, grupoTipoContenedor,
      grupoEmbalajeLCL, grupoOtroLCL, grupoTerrestre, grupoOtroTerrestre].forEach(e => e.classList.add("d-none"));
-
+    
+    // Actualizar label del campo de transporte
     if (valorModo === "Aereo") {
+      labelTransporte.textContent = "Nombre Avión / Línea Aérea";
       grupoAereo.classList.remove("d-none");
       if (tipoEmbalajeAereo.value === "OTRO") {
         grupoOtroAereo.classList.remove("d-none");
       }
-    }
-
-    if (valorModo === "Maritimo") {
+    } else if (valorModo === "Maritimo") {
+      labelTransporte.textContent = "Nombre Navío / Línea Naviera";
       grupoMaritimo.classList.remove("d-none");
       if (embalajeMaritimo.value === "FCL") {
         grupoTipoContenedor.classList.remove("d-none");
@@ -476,23 +482,186 @@ document.addEventListener("DOMContentLoaded", function () {
           grupoOtroLCL.classList.remove("d-none");
         }
       }
-    }
-
-    if (valorModo === "TerrestreFerroviario") {
+    } else if (valorModo === "TerrestreFerroviario") {
+      labelTransporte.textContent = "Nombre Transporte Terrestre";
       grupoTerrestre.classList.remove("d-none");
       if (tipoEmbalajeTerrestre.value === "OTRO") {
         grupoOtroTerrestre.classList.remove("d-none");
       }
     }
+    
+    // Limpiar autocomplete cuando cambia el modo
+    cerrarAutocomplete();
   }
 
-  // Event listeners
+  // Funciones de Autocomplete
+  function crearAutocomplete() {
+    if (autocompleteContainer) return;
+    
+    autocompleteContainer = document.createElement('div');
+    autocompleteContainer.className = 'autocomplete-container';
+    autocompleteContainer.style.cssText = `
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-top: none;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    `;
+    
+    nombreTransporteInput.parentNode.style.position = 'relative';
+    nombreTransporteInput.parentNode.appendChild(autocompleteContainer);
+  }
+
+  function mostrarResultados(results) {
+    if (!autocompleteContainer) crearAutocomplete();
+    
+    currentResults = results;
+    selectedIndex = -1;
+    
+    autocompleteContainer.innerHTML = '';
+    
+    if (results.length === 0) {
+      autocompleteContainer.style.display = 'none';
+      return;
+    }
+    
+    results.forEach((result, index) => {
+      const item = document.createElement('div');
+      item.className = 'autocomplete-item';
+      item.style.cssText = `
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+      `;
+      item.textContent = result.name;
+      
+      item.addEventListener('mouseenter', () => {
+        selectedIndex = index;
+        actualizarSeleccion();
+      });
+      
+      item.addEventListener('click', () => {
+        seleccionarItem(result);
+      });
+      
+      autocompleteContainer.appendChild(item);
+    });
+    
+    autocompleteContainer.style.display = 'block';
+  }
+
+  function actualizarSeleccion() {
+    const items = autocompleteContainer.querySelectorAll('.autocomplete-item');
+    items.forEach((item, index) => {
+      if (index === selectedIndex) {
+        item.style.backgroundColor = '#007bff';
+        item.style.color = 'white';
+      } else {
+        item.style.backgroundColor = 'transparent';
+        item.style.color = 'black';
+      }
+    });
+  }
+
+  function seleccionarItem(result) {
+    nombreTransporteInput.value = result.name;
+    cerrarAutocomplete();
+  }
+
+  function cerrarAutocomplete() {
+    if (autocompleteContainer) {
+      autocompleteContainer.style.display = 'none';
+    }
+    selectedIndex = -1;
+  }
+
+  // Búsqueda en API
+  let timeoutId = null;
+  
+  function buscarTransporte(query) {
+    if (query.length < 2) {
+      cerrarAutocomplete();
+      return;
+    }
+    
+    const tipoTransporte = modo.value.toLowerCase();
+    
+    // Solo buscar para aéreo y marítimo
+    if (!['aereo', 'maritimo'].includes(tipoTransporte)) {
+      cerrarAutocomplete();
+      return;
+    }
+    
+    fetch(`/api/buscar-transporte/?tipo=${tipoTransporte}&q=${encodeURIComponent(query)}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.results) {
+          mostrarResultados(data.results);
+        }
+      })
+      .catch(error => {
+        console.error('Error en búsqueda:', error);
+        cerrarAutocomplete();
+      });
+  }
+
+  // Event Listeners
   modo.addEventListener("change", actualizarVistaEmbalaje);
   tipoEmbalajeAereo?.addEventListener("change", actualizarVistaEmbalaje);
   embalajeMaritimo?.addEventListener("change", actualizarVistaEmbalaje);
   embalajeLCL?.addEventListener("change", actualizarVistaEmbalaje);
   tipoEmbalajeTerrestre?.addEventListener("change", actualizarVistaEmbalaje);
 
+  // Autocomplete event listeners
+  nombreTransporteInput.addEventListener('input', function(e) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      buscarTransporte(e.target.value);
+    }, 300); // Debounce de 300ms
+  });
+
+  nombreTransporteInput.addEventListener('keydown', function(e) {
+    if (!autocompleteContainer || autocompleteContainer.style.display === 'none') return;
+    
+    switch(e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, currentResults.length - 1);
+        actualizarSeleccion();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        actualizarSeleccion();
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0 && currentResults[selectedIndex]) {
+          seleccionarItem(currentResults[selectedIndex]);
+        }
+        break;
+      case 'Escape':
+        cerrarAutocomplete();
+        break;
+    }
+  });
+
+  // Cerrar autocomplete al hacer click fuera
+  document.addEventListener('click', function(e) {
+    if (!nombreTransporteInput.contains(e.target) && 
+        (!autocompleteContainer || !autocompleteContainer.contains(e.target))) {
+      cerrarAutocomplete();
+    }
+  });
+
+  // Inicializar
   actualizarVistaEmbalaje();
 });
 </script>
