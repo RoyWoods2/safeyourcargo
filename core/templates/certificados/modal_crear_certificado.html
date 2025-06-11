@@ -338,6 +338,12 @@
     </div>
   </div>
 </div>
+<div id="spinner-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.85); z-index:9999; justify-content:center; align-items:center; flex-direction:column;">
+  <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+    <span class="visually-hidden">Cargando...</span>
+  </div>
+  <p class="mt-3 text-primary fw-bold">Generando certificado y factura electrónica...</p>
+</div>
 
 <script>
 function calcularMontoAsegurado() {
@@ -387,8 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function getCookie(name) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
+    for (let cookie of document.cookie.split(';')) {
       cookie = cookie.trim();
       if (cookie.startsWith(name + '=')) {
         cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
@@ -399,36 +404,70 @@ function getCookie(name) {
   return cookieValue;
 }
 
-document.getElementById("form-certificado").addEventListener("submit", function (e) {
-  e.preventDefault();
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("form-certificado");
+  const spinner = document.getElementById("spinner-overlay");
 
-  const formData = new FormData(this);
+  if (!form || !spinner) return;
 
-  fetch("{% url 'crear_certificado' %}", {
-    method: "POST",
-    headers: {
-      "X-CSRFToken": getCookie("csrftoken"),
-      "X-Requested-With": "XMLHttpRequest"
-    },
-    body: formData
-  })
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    spinner.style.display = "flex";
+
+    const formData = new FormData(form);
+
+    fetch("{% url 'crear_certificado' %}", {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": getCookie("csrftoken"),
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: formData
+    })
     .then(res => res.json())
     .then(data => {
-        if (data.success) {
-            alert("Certificado creado correctamente.");
-            location.reload();
-        } else if (data.errors) {
-          let mensaje = "Errores en el formulario:\n";
-          for (const [formulario, erroresForm] of Object.entries(data.errors)) {
-            for (const [campo, listaErrores] of Object.entries(erroresForm)) {
-                mensaje += `- ${campo}: ${listaErrores.join(", ")}\n`;
-            }
+      spinner.style.display = "none";
+
+      if (data.success) {
+        Swal.fire({
+          icon: "success",
+          title: "Certificado creado",
+          text: "Factura emitida correctamente.",
+          confirmButtonText: "Ver listado"
+        }).then(() => location.reload());
+      } else if (data.errors) {
+        let mensaje = "";
+        for (const [formulario, errores] of Object.entries(data.errors)) {
+          for (const [campo, lista] of Object.entries(errores)) {
+            mensaje += `- ${campo}: ${lista.join(", ")}\n`;
+          }
         }
-        alert(mensaje);
-        }
+        Swal.fire({
+          icon: "error",
+          title: "Errores en el formulario",
+          text: mensaje
+        });
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Error desconocido",
+          text: "No se pudo generar el certificado."
+        });
+      }
     })
+    .catch(error => {
+      spinner.style.display = "none";
+      Swal.fire({
+        icon: "error",
+        title: "Error de red",
+        text: error.message || "No se pudo conectar al servidor."
+      });
+    });
+  });
 });
 </script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const modo = document.getElementById("modoTransporte");

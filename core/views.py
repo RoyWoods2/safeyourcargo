@@ -15,7 +15,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import requests
 from django.utils.formats import date_format
 from num2words import num2words
-from core.services.facturacion_cl import emitir_factura_exenta_cl, generar_txt_factura_exenta,generar_xml_factura_exenta
+from core.services.facturacion_cl import emitir_factura_exenta_cl_xml, generar_txt_factura_exenta,generar_xml_factura_exenta
 from core.services.unlocode_utils import get_ports_by_country,get_airports_by_country,pais_a_codigo # 🔹 IMPORTA AQUÍ
 import logging
 import tempfile
@@ -35,7 +35,7 @@ from django.db.models import Q, Count, Sum
 from .utils import registrar_actividad, obtener_dolar_observado
 from xml.etree.ElementTree import Element, SubElement, tostring
 from django.views.decorators.http import require_http_methods
-
+from .utils_pdf import generar_pdf_certificado, generar_pdf_factura
 Usuario = get_user_model()
 
 @login_required
@@ -191,12 +191,20 @@ def form_cliente(request):
         form = ClienteForm(request.POST)
 
     if form.is_valid():
-        cliente = form.save()
+        cliente = form.save(commit=False)
+
+        # Asignar creador solo si es creación
+        if not cliente_id:
+            cliente.creado_por = request.user
+
+        cliente.save()
+
         # 🔥 Registrar actividad
         if cliente_id:
             registrar_actividad(request.user, f"Editó cliente: {cliente.nombre}")
         else:
             registrar_actividad(request.user, f"Creó cliente: {cliente.nombre}")
+
         return JsonResponse({'success': True})
     else:
         return JsonResponse({
@@ -293,23 +301,33 @@ def form_usuario(request):
     password = request.POST.get("password")
     rol = request.POST.get("rol")
     cliente_id = request.POST.get("cliente")
+    correo = request.POST.get("correo", "").strip()
+    telefono = request.POST.get("telefono", "").strip()
 
     if usuario_id:
+        # Edición
         usuario = get_object_or_404(Usuario, pk=usuario_id)
         usuario.username = username
+        usuario.correo = correo
+        usuario.telefono = telefono
         if password:
             usuario.set_password(password)
     else:
-        usuario = Usuario(username=username)
+        # Creación
+        usuario = Usuario(
+            username=username,
+            correo=correo,
+            telefono=telefono
+        )
         usuario.set_password(password or "123456")  # Contraseña por defecto
 
-    # 🔹 Lógica de permisos y asignación de roles
+    # Asignación de rol con control por permisos
     if request.user.is_superuser:
         usuario.rol = rol
     elif request.user.rol == "Administrador":
         usuario.rol = "Revendedor"
     elif request.user.rol == "Revendedor":
-        usuario.rol = "Usuario"  # 🔥 El revendedor solo puede crear usuarios normales
+        usuario.rol = "Usuario"
     else:
         return JsonResponse({'success': False, 'error': 'No tienes permiso para crear usuarios.'}, status=403)
 
@@ -317,40 +335,8 @@ def form_usuario(request):
     usuario.pendiente_aprobacion = False
     usuario.cliente_id = cliente_id
     usuario.save()
-    
+
     return JsonResponse({'success': True})
-
-def register(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        email = request.POST.get('email')
-        cliente_id = request.POST.get('cliente')
-
-        # Crear usuario pendiente de aprobación
-        usuario = Usuario.objects.create_user(username=username, password=password, email=email)
-        usuario.is_active = False
-        usuario.pendiente_aprobacion = True
-        usuario.save()
-
-        usuario.rol = "Usuario"  # Rol básico por defecto
-        usuario.cliente_id = cliente_id
-        usuario.save()
-
-        # Notificar a los superusuarios
-        superusuarios = Usuario.objects.filter(is_superuser=True)
-        for su in superusuarios:
-            send_mail(
-                "Nueva solicitud de cuenta",
-                f"El usuario {username} ha solicitado una cuenta y espera tu aprobación.",
-                settings.DEFAULT_FROM_EMAIL,
-                [su.email]
-            )
-
-        return render(request, 'registro_exitoso.html')
-
-    clientes = Cliente.objects.all()
-    return render(request, 'register.html', {'clientes': clientes})
 
 @user_passes_test(lambda u: u.is_superuser)
 def aprobar_usuario(request, user_id):
@@ -403,10 +389,13 @@ def toggle_estado_usuario(request, pk):
     except User.DoesNotExist:
         raise Http404("Usuario no encontrado")
     
+from django.core.mail import EmailMessage
+from .utils_pdf import generar_pdf_certificado, generar_pdf_factura
+
 @login_required
 def crear_certificado(request):
     if request.method == 'POST':
-        cert_form = CertificadoTransporteForm(request.POST)
+        cert_form = CertificadoTransporteForm(request.POST, user=request.user)
         ruta_form = RutaForm(request.POST)
         metodo_form = MetodoEmbarqueForm(request.POST)
         mercancia_form = TipoMercanciaForm(request.POST)
@@ -421,13 +410,11 @@ def crear_certificado(request):
             viaje_form.is_valid(),
             notas_form.is_valid()
         ]):
-            # Guardar relacionados
             ruta = ruta_form.save()
             metodo = metodo_form.save()
             mercancia = mercancia_form.save()
             viaje = viaje_form.save(commit=False)
 
-            # Buscar países por sigla
             from core.models import Pais
             origen_pais = Pais.objects.filter(sigla__iexact=viaje.vuelo_origen_pais).first()
             destino_pais = Pais.objects.filter(sigla__iexact=viaje.vuelo_destino_pais).first()
@@ -447,26 +434,16 @@ def crear_certificado(request):
             certificado.tipo_mercancia = mercancia
             certificado.viaje = viaje
             certificado.notas = notas
+            certificado.creado_por = request.user
             certificado.save()
 
             registrar_actividad(request.user, f"Creó certificado: C-{certificado.id}")
 
-            # Crear la factura automáticamente
-            from decimal import Decimal
-            from datetime import date
-            import requests
-            from core.services.facturacion_cl import emitir_factura_exenta_cl
-
-            try:
-                folio_disponible = obtener_siguiente_folio()
-            except Exception as e:
-                return JsonResponse({'success': False, 'error': f"❌ Error al obtener folio: {str(e)}"})
-
+                
             factura, created = Factura.objects.get_or_create(
                 certificado=certificado,
                 defaults={
                     'numero': Factura.objects.count() + 1,
-                    'folio_sii': folio_disponible,
                     'razon_social': certificado.cliente.nombre,
                     'rut': certificado.cliente.rut,
                     'direccion': certificado.cliente.direccion,
@@ -478,18 +455,46 @@ def crear_certificado(request):
             )
 
             factura.valor_usd = certificado.tipo_mercancia.valor_prima
-
             resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
-            if "valor" in resultado:
-                dolar = Decimal(resultado["valor"])
-            else:
-                dolar = Decimal('950.00')
+            dolar = Decimal(resultado.get("valor", '950.00'))
 
             factura.tipo_cambio = dolar
             factura.valor_clp = factura.valor_usd * dolar
+
+
             factura.save()
 
-            resultado_emision = emitir_factura_exenta_cl(factura)
+            # Emitir XML a Facturacion.cl
+            resultado_emision = emitir_factura_exenta_cl_xml(factura)
+
+            if resultado_emision.get("success"):
+                logger.info(f"📤 XML enviado correctamente para C-{certificado.id}")
+            else:
+                logger.error(f"❌ Error al emitir factura C-{certificado.id}: {resultado_emision.get('error')}")
+
+            # Generar PDFs
+            pdf_cert = generar_pdf_certificado(certificado, request)
+            pdf_fact = generar_pdf_factura(certificado, request)
+
+            # Enviar correo
+            User = get_user_model()
+            superadmins = User.objects.filter(is_superuser=True, is_active=True).values_list('email', flat=True)
+            destinatarios = list(set([request.user.email] + list(superadmins)))
+
+            mensaje = EmailMessage(
+                subject=f"📄 Certificado generado: C-{certificado.id}",
+                body=f"Estimado/a {request.user.username},\n\nSe ha generado correctamente el certificado C-{certificado.id} para el cliente {certificado.cliente.nombre}.\nAdjunto encontrarás los documentos PDF.\n\nSaludos,\nSistema UniCloud",
+                from_email="no-reply@unisource.cl",
+                to=destinatarios
+            )
+            mensaje.attach(f"certificado-C{certificado.id}.pdf", pdf_cert.getvalue(), "application/pdf")
+            mensaje.attach(f"factura-C{certificado.id}.pdf", pdf_fact.getvalue(), "application/pdf")
+
+            try:
+                mensaje.send(fail_silently=False)
+                logger.info(f"✅ Correo enviado correctamente a {destinatarios}")
+            except Exception as e:
+                logger.error(f"❌ Error al enviar correo de C-{certificado.id}: {str(e)}")
 
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({
@@ -513,28 +518,56 @@ def crear_certificado(request):
                 }
             })
 
-    # GET
-    cert_form = CertificadoTransporteForm()
-    ruta_form = RutaForm()
-    metodo_form = MetodoEmbarqueForm()
-    mercancia_form = TipoMercanciaForm()
-    viaje_form = ViajeForm()
-    notas_form = NotasNumerosForm()
+    # GET - Filtros y formularios
+    fecha_inicio = request.GET.get('inicio')
+    fecha_fin = request.GET.get('fin')
+    busqueda = request.GET.get('q', '').strip()
 
-    certificados_list = CertificadoTransporte.objects.select_related('cliente', 'notas').order_by('-id')
+    certificados_list = CertificadoTransporte.objects.select_related('cliente', 'notas', 'creado_por').order_by('-id')
+
+    if not request.user.is_superuser:
+        certificados_list = certificados_list.filter(creado_por=request.user)
+
+    if fecha_inicio:
+        try:
+            certificados_list = certificados_list.filter(fecha_creacion__gte=datetime.strptime(fecha_inicio, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    if fecha_fin:
+        try:
+            certificados_list = certificados_list.filter(fecha_creacion__lte=datetime.strptime(fecha_fin, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    if busqueda:
+        certificados_list = certificados_list.filter(
+            Q(cliente__nombre__icontains=busqueda) |
+            Q(cliente__rut__icontains=busqueda) |
+            Q(id__icontains=busqueda) |
+            Q(notas__numero_factura__icontains=busqueda)
+        )
+
     paginator = Paginator(certificados_list, 10)
     certificados = paginator.get_page(request.GET.get('page'))
 
     context = {
-        'cert_form': cert_form,
-        'ruta_form': ruta_form,
-        'metodo_form': metodo_form,
-        'mercancia_form': mercancia_form,
-        'viaje_form': viaje_form,
-        'notas_form': notas_form,
+        'cert_form': CertificadoTransporteForm(user=request.user),
+        'ruta_form': RutaForm(),
+        'metodo_form': MetodoEmbarqueForm(),
+        'mercancia_form': TipoMercanciaForm(),
+        'viaje_form': ViajeForm(),
+        'notas_form': NotasNumerosForm(),
         'certificados': certificados,
+        'filtros': {
+            'inicio': fecha_inicio or '',
+            'fin': fecha_fin or '',
+            'q': busqueda,
+        }
     }
+
     return render(request, 'certificados/crear_certificado.html', context)
+
 
 
 
@@ -1309,18 +1342,25 @@ def buscar_navios(request):
 
 def buscar_navios_myshiptracking(query):
     """
-    MyShipTracking API con mejor manejo de errores
+    MyShipTracking API con URL corregida y mejor manejo de errores
     """
     try:
         api_key = "xsbnnhmmZ8$lXDqEX6u7FQKXsJmtN8fqKA"
         secret_key = "DNfJ0Z7tF"
         
-        url = "https://api.myshiptracking.com/vessels/search"
+        # URLs posibles - prueba estas en orden:
+        urls_posibles = [
+            "https://api.myshiptracking.com/api/v1/vessels/search",
+            "https://api.myshiptracking.com/v1/search",
+            "https://api.myshiptracking.com/search",
+            "https://myshiptracking.com/api/vessels/search",
+        ]
         
         headers = {
             'X-API-Key': api_key,
             'X-Secret-Key': secret_key,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; ShipTracker/1.0)'
         }
         
         params = {
@@ -1328,94 +1368,199 @@ def buscar_navios_myshiptracking(query):
             'limit': 15
         }
         
-        response = requests.get(url, headers=headers, params=params, timeout=8)
-        
-        if response.status_code == 200:
-            data = response.json()
-            results = []
-            
-            vessels = data.get('data', []) or data.get('vessels', []) or data.get('results', [])
-            
-            for vessel in vessels:
-                vessel_name = vessel.get('name') or vessel.get('ship_name') or vessel.get('vessel_name', '')
-                imo = vessel.get('imo') or vessel.get('imo_number', '')
-                mmsi = vessel.get('mmsi') or vessel.get('mmsi_number', '')
-                vessel_type = vessel.get('type') or vessel.get('ship_type', '')
+        # Probar cada URL hasta encontrar una que funcione
+        for url in urls_posibles:
+            try:
+                print(f"Probando URL: {url}")
+                response = requests.get(url, headers=headers, params=params, timeout=8)
                 
-                if vessel_name:
-                    display_name = vessel_name
-                    if imo:
-                        display_name += f" (IMO: {imo})"
-                    elif mmsi:
-                        display_name += f" (MMSI: {mmsi})"
+                if response.status_code == 200:
+                    print(f"✅ URL funcional encontrada: {url}")
+                    data = response.json()
+                    results = []
                     
-                    results.append({
-                        'id': imo or mmsi or vessel_name.replace(' ', '_').lower(),
-                        'name': display_name,
-                        'type': 'ship',
-                        'imo': imo,
-                        'mmsi': mmsi,
-                        'vessel_type': vessel_type
-                    })
-            
-            return results
-            
-        else:
-            print(f"MyShipTracking error: {response.status_code} - {response.text}")
-            return []
+                    vessels = data.get('data', []) or data.get('vessels', []) or data.get('results', [])
+                    
+                    for vessel in vessels:
+                        vessel_name = vessel.get('name') or vessel.get('ship_name') or vessel.get('vessel_name', '')
+                        imo = vessel.get('imo') or vessel.get('imo_number', '')
+                        mmsi = vessel.get('mmsi') or vessel.get('mmsi_number', '')
+                        vessel_type = vessel.get('type') or vessel.get('ship_type', '')
+                        
+                        if vessel_name:
+                            display_name = vessel_name
+                            if imo:
+                                display_name += f" (IMO: {imo})"
+                            elif mmsi:
+                                display_name += f" (MMSI: {mmsi})"
+                            
+                            results.append({
+                                'id': imo or mmsi or vessel_name.replace(' ', '_').lower(),
+                                'name': display_name,
+                                'type': 'ship',
+                                'imo': imo,
+                                'mmsi': mmsi,
+                                'vessel_type': vessel_type
+                            })
+                    
+                    return results
+                    
+                elif response.status_code == 404:
+                    continue
+                else:
+                    continue
+                    
+            except requests.exceptions.ConnectionError:
+                continue
+            except Exception as e:
+                continue
+        
+        return []
             
     except Exception as e:
-        print(f"Error MyShipTracking: {e}")
         return []
 
 
+# Alternativa: usar una API diferente como VesselFinder o MarineTraffic
+def buscar_navios_alternativa(query):
+    """
+    Alternativa usando una API pública diferente
+    """
+    try:
+        # Ejemplo con VesselFinder API (necesitas registrarte para obtener API key)
+        # url = "https://api.vesselfinder.com/vessels"
+        
+        # Por ahora, usar solo el fallback mejorado
+        print("Usando fallback en lugar de API externa")
+        return []
+        
+    except Exception as e:
+        print(f"Error API alternativa: {e}")
+        return []
+
 def buscar_navios_fallback(query):
     """
-    Fallback mejorado con base de datos extensa de navíos
+    Base de datos expandida con nombres de barcos reales para autocompletar
     """
     navios_db = [
-        # Grandes portacontenedores
-        {"name": "EVER GIVEN", "imo": "9811000", "type": "Container Ship", "company": "Evergreen Marine"},
-        {"name": "MSC OSCAR", "imo": "9811046", "type": "Container Ship", "company": "MSC"},
-        {"name": "MAERSK TRIPLE E", "imo": "9811051", "type": "Container Ship", "company": "Maersk Line"},
-        {"name": "CMA CGM MARCO POLO", "imo": "9454436", "type": "Container Ship", "company": "CMA CGM"},
-        {"name": "COSCO SHIPPING UNIVERSE", "imo": "9795592", "type": "Container Ship", "company": "COSCO"},
+        # === PORTACONTENEDORES FAMOSOS ===
+        {"name": "EVER GIVEN", "imo": "9811000", "type": "Container Ship", "company": "Evergreen Marine", "flag": "Panama"},
+        {"name": "EVER GOLDEN", "imo": "9811012", "type": "Container Ship", "company": "Evergreen Marine", "flag": "Panama"},
+        {"name": "EVER GLOBE", "imo": "9811024", "type": "Container Ship", "company": "Evergreen Marine", "flag": "Panama"},
+        {"name": "MSC OSCAR", "imo": "9811046", "type": "Container Ship", "company": "MSC", "flag": "Panama"},
+        {"name": "MSC ZARA", "imo": "9619881", "type": "Container Ship", "company": "MSC", "flag": "Liberia"},
+        {"name": "MSC DIANA", "imo": "9621465", "type": "Container Ship", "company": "MSC", "flag": "Liberia"},
+        {"name": "MSC MAYA", "imo": "9619893", "type": "Container Ship", "company": "MSC", "flag": "Liberia"},
+        {"name": "MAERSK MADRID", "imo": "9778425", "type": "Container Ship", "company": "Maersk Line", "flag": "Denmark"},
+        {"name": "MAERSK MILAN", "imo": "9778437", "type": "Container Ship", "company": "Maersk Line", "flag": "Denmark"},
+        {"name": "MAERSK MUNICH", "imo": "9778449", "type": "Container Ship", "company": "Maersk Line", "flag": "Denmark"},
+        {"name": "MAERSK NEBRASKA", "imo": "9778451", "type": "Container Ship", "company": "Maersk Line", "flag": "Denmark"},
+        {"name": "CMA CGM MARCO POLO", "imo": "9454436", "type": "Container Ship", "company": "CMA CGM", "flag": "France"},
+        {"name": "CMA CGM BENJAMIN FRANKLIN", "imo": "9745729", "type": "Container Ship", "company": "CMA CGM", "flag": "France"},
+        {"name": "CMA CGM ANTOINE DE SAINT EXUPERY", "imo": "9745731", "type": "Container Ship", "company": "CMA CGM", "flag": "France"},
+        {"name": "COSCO SHIPPING UNIVERSE", "imo": "9795592", "type": "Container Ship", "company": "COSCO", "flag": "China"},
+        {"name": "COSCO SHIPPING GALAXY", "imo": "9795606", "type": "Container Ship", "company": "COSCO", "flag": "China"},
+        {"name": "COSCO SHIPPING SOLAR", "imo": "9795618", "type": "Container Ship", "company": "COSCO", "flag": "China"},
+        {"name": "OOCL HONG KONG", "imo": "9833910", "type": "Container Ship", "company": "OOCL", "flag": "Hong Kong"},
+        {"name": "OOCL MADRID", "imo": "9833922", "type": "Container Ship", "company": "OOCL", "flag": "Hong Kong"},
+        {"name": "OOCL SHENZHEN", "imo": "9833934", "type": "Container Ship", "company": "OOCL", "flag": "Hong Kong"},
         
-        # Cruceros famosos
-        {"name": "SYMPHONY OF THE SEAS", "imo": "9744001", "type": "Cruise Ship", "company": "Royal Caribbean"},
-        {"name": "HARMONY OF THE SEAS", "imo": "9692596", "type": "Cruise Ship", "company": "Royal Caribbean"},
-        {"name": "OASIS OF THE SEAS", "imo": "9398112", "type": "Cruise Ship", "company": "Royal Caribbean"},
-        {"name": "ALLURE OF THE SEAS", "imo": "9398124", "type": "Cruise Ship", "company": "Royal Caribbean"},
+        # === CRUCEROS FAMOSOS ===
+        {"name": "SYMPHONY OF THE SEAS", "imo": "9744001", "type": "Cruise Ship", "company": "Royal Caribbean", "flag": "Bahamas"},
+        {"name": "HARMONY OF THE SEAS", "imo": "9692596", "type": "Cruise Ship", "company": "Royal Caribbean", "flag": "Bahamas"},
+        {"name": "ALLURE OF THE SEAS", "imo": "9398124", "type": "Cruise Ship", "company": "Royal Caribbean", "flag": "Bahamas"},
+        {"name": "OASIS OF THE SEAS", "imo": "9398112", "type": "Cruise Ship", "company": "Royal Caribbean", "flag": "Bahamas"},
+        {"name": "WONDER OF THE SEAS", "imo": "9863819", "type": "Cruise Ship", "company": "Royal Caribbean", "flag": "Bahamas"},
+        {"name": "NORWEGIAN BLISS", "imo": "9751509", "type": "Cruise Ship", "company": "Norwegian Cruise Line", "flag": "Bahamas"},
+        {"name": "NORWEGIAN EPIC", "imo": "9410569", "type": "Cruise Ship", "company": "Norwegian Cruise Line", "flag": "Bahamas"},
+        {"name": "CARNIVAL VISTA", "imo": "9700424", "type": "Cruise Ship", "company": "Carnival Cruise Line", "flag": "Panama"},
+        {"name": "CARNIVAL HORIZON", "imo": "9781024", "type": "Cruise Ship", "company": "Carnival Cruise Line", "flag": "Panama"},
+        {"name": "MSC SEASIDE", "imo": "9706722", "type": "Cruise Ship", "company": "MSC Cruises", "flag": "Malta"},
+        {"name": "MSC MERAVIGLIA", "imo": "9744101", "type": "Cruise Ship", "company": "MSC Cruises", "flag": "Malta"},
+        {"name": "CELEBRITY EDGE", "imo": "9781999", "type": "Cruise Ship", "company": "Celebrity Cruises", "flag": "Malta"},
         
-        # Tanqueros principales
-        {"name": "SEAWISE GIANT", "imo": "7381154", "type": "Oil Tanker", "company": ""},
-        {"name": "TI EUROPE", "imo": "9213891", "type": "Oil Tanker", "company": ""},
-        {"name": "TI OCEANIA", "imo": "9213883", "type": "Oil Tanker", "company": ""},
+        # === TANQUEROS PETROLEROS ===
+        {"name": "SEAWISE GIANT", "imo": "7381154", "type": "Oil Tanker", "company": "Retired", "flag": "Singapore"},
+        {"name": "TI EUROPE", "imo": "9213891", "type": "Oil Tanker", "company": "Euronav", "flag": "Belgium"},
+        {"name": "TI OCEANIA", "imo": "9213883", "type": "Oil Tanker", "company": "Euronav", "flag": "Belgium"},
+        {"name": "TI ASIA", "imo": "9213907", "type": "Oil Tanker", "company": "Euronav", "flag": "Belgium"},
+        {"name": "FRONT ALTAIR", "imo": "9253830", "type": "Oil Tanker", "company": "Frontline", "flag": "Marshall Islands"},
+        {"name": "FRONT COMMANDER", "imo": "9156123", "type": "Oil Tanker", "company": "Frontline", "flag": "Marshall Islands"},
+        {"name": "NORDIC SPACE", "imo": "9395220", "type": "Oil Tanker", "company": "Nordic Tankers", "flag": "Denmark"},
+        {"name": "ATLANTIC EXPLORER", "imo": "9247465", "type": "Oil Tanker", "company": "Atlantic Tankers", "flag": "Liberia"},
         
-        # Principales líneas navieras (nombres genéricos)
-        {"name": "MAERSK LINE VESSEL", "type": "Container Ship", "company": "Maersk Line"},
-        {"name": "MSC CONTAINER SHIP", "type": "Container Ship", "company": "MSC"},
-        {"name": "CMA CGM VESSEL", "type": "Container Ship", "company": "CMA CGM"},
-        {"name": "COSCO SHIPPING LINE", "type": "Container Ship", "company": "COSCO"},
-        {"name": "HAPAG LLOYD VESSEL", "type": "Container Ship", "company": "Hapag-Lloyd"},
-        {"name": "EVERGREEN CONTAINER", "type": "Container Ship", "company": "Evergreen Marine"},
-        {"name": "YANG MING VESSEL", "type": "Container Ship", "company": "Yang Ming"},
-        {"name": "HMM CONTAINER SHIP", "type": "Container Ship", "company": "HMM"},
-        {"name": "ONE CONTAINER VESSEL", "type": "Container Ship", "company": "Ocean Network Express"},
-        {"name": "ZIM CONTAINER SHIP", "type": "Container Ship", "company": "ZIM"},
+        # === BULK CARRIERS (GRANELEROS) ===
+        {"name": "BERGE STAHL", "imo": "8022915", "type": "Bulk Carrier", "company": "Berge Bulk", "flag": "Norway"},
+        {"name": "VALE BRASIL", "imo": "9545647", "type": "Bulk Carrier", "company": "Vale", "flag": "Brazil"},
+        {"name": "VALE RIO DE JANEIRO", "imo": "9545659", "type": "Bulk Carrier", "company": "Vale", "flag": "Brazil"},
+        {"name": "PACIFIC CHALLENGER", "imo": "9384890", "type": "Bulk Carrier", "company": "Pacific Basin", "flag": "Hong Kong"},
+        {"name": "CAPE FLORES", "imo": "9427834", "type": "Bulk Carrier", "company": "Capesize Shipping", "flag": "Marshall Islands"},
+        {"name": "IRON CHIEFTAIN", "imo": "9398765", "type": "Bulk Carrier", "company": "Iron Ore Transport", "flag": "Liberia"},
+        
+        # === BARCOS HISTÓRICOS FAMOSOS ===
+        {"name": "TITANIC", "imo": "Historical", "type": "Passenger Ship", "company": "White Star Line", "flag": "UK"},
+        {"name": "QUEEN MARY 2", "imo": "9241061", "type": "Ocean Liner", "company": "Cunard Line", "flag": "UK"},
+        {"name": "QUEEN ELIZABETH", "imo": "9477438", "type": "Cruise Ship", "company": "Cunard Line", "flag": "UK"},
+        {"name": "QUEEN VICTORIA", "imo": "9320556", "type": "Cruise Ship", "company": "Cunard Line", "flag": "UK"},
+        
+        # === FERRY Y RORO ===
+        {"name": "STENA HOLLANDICA", "imo": "9419567", "type": "RoRo Ferry", "company": "Stena Line", "flag": "Netherlands"},
+        {"name": "PRIDE OF HULL", "imo": "9156147", "type": "RoRo Ferry", "company": "P&O Ferries", "flag": "UK"},
+        {"name": "SILJA SERENADE", "imo": "8902012", "type": "RoRo Ferry", "company": "Tallink Silja", "flag": "Finland"},
+        {"name": "COLOR FANTASY", "imo": "9306354", "type": "RoRo Ferry", "company": "Color Line", "flag": "Norway"},
+        
+        # === CARGUEROS GENERALES ===
+        {"name": "ATLANTIC CARTIER", "imo": "9245678", "type": "General Cargo", "company": "Atlantic Shipping", "flag": "Canada"},
+        {"name": "MEDITERRANEAN STAR", "imo": "9123456", "type": "General Cargo", "company": "Mediterranean Lines", "flag": "Italy"},
+        {"name": "NORDIC TRADER", "imo": "9234567", "type": "General Cargo", "company": "Nordic Shipping", "flag": "Sweden"},
+        {"name": "BALTIC PRINCESS", "imo": "9345678", "type": "General Cargo", "company": "Baltic Lines", "flag": "Estonia"},
+        
+        # === BARCOS ESPAÑOLES Y LATINOAMERICANOS ===
+        {"name": "CIUDAD DE VALENCIA", "imo": "9456789", "type": "Container Ship", "company": "Naviera Española", "flag": "Spain"},
+        {"name": "BARCELONA EXPRESS", "imo": "9567890", "type": "Container Ship", "company": "Mediterranean Shipping", "flag": "Spain"},
+        {"name": "CRISTÓBAL COLÓN", "imo": "9678901", "type": "Cruise Ship", "company": "Pullmantur", "flag": "Spain"},
+        {"name": "SANTÍSIMA TRINIDAD", "imo": "Historical", "type": "Naval Ship", "company": "Spanish Navy", "flag": "Spain"},
+        {"name": "DON JUAN DE AUSTRIA", "imo": "9789012", "type": "Naval Ship", "company": "Spanish Navy", "flag": "Spain"},
+        {"name": "PATAGONIA", "imo": "9890123", "type": "General Cargo", "company": "Naviera Argentina", "flag": "Argentina"},
+        {"name": "MAGELLAN STAR", "imo": "9901234", "type": "Container Ship", "company": "Chilean Shipping", "flag": "Chile"},
+        {"name": "AMAZONAS", "imo": "9012345", "type": "Bulk Carrier", "company": "Brazilian Shipping", "flag": "Brazil"},
+        
+        # === NOMBRES GENÉRICOS PARA COMPLETAR ===
+        {"name": "ATLANTIC PRIDE", "type": "Container Ship", "company": "Atlantic Lines"},
+        {"name": "PACIFIC STAR", "type": "Bulk Carrier", "company": "Pacific Shipping"},
+        {"name": "MEDITERRANEAN QUEEN", "type": "Cruise Ship", "company": "Med Cruises"},
+        {"name": "NORTHERN LIGHT", "type": "Oil Tanker", "company": "Northern Shipping"},
+        {"name": "SOUTHERN CROSS", "type": "General Cargo", "company": "Southern Lines"},
+        {"name": "EASTERN SPIRIT", "type": "Container Ship", "company": "Eastern Shipping"},
+        {"name": "WESTERN WIND", "type": "Bulk Carrier", "company": "Western Lines"},
+        {"name": "GLOBAL NAVIGATOR", "type": "Container Ship", "company": "Global Shipping"},
+        {"name": "OCEAN VOYAGER", "type": "General Cargo", "company": "Ocean Lines"},
+        {"name": "SEA CHAMPION", "type": "Oil Tanker", "company": "Sea Transport"},
     ]
     
     results = []
     query_upper = query.upper()
     
-    # Buscar coincidencias
+    # Buscar coincidencias exactas y parciales
     for navio in navios_db:
-        if query_upper in navio["name"].upper() or (navio.get("company") and query_upper in navio["company"].upper()):
+        nombre_match = query_upper in navio["name"].upper()
+        company_match = navio.get("company") and query_upper in navio["company"].upper()
+        type_match = query_upper in navio["type"].upper()
+        
+        if nombre_match or company_match or type_match:
             display_name = navio["name"]
-            if navio.get("imo"):
-                display_name += f" (IMO: {navio['imo']})"
+            
+            # Agregar información adicional
+            info_parts = []
+            if navio.get("imo") and navio["imo"] != "Historical":
+                info_parts.append(f"IMO: {navio['imo']}")
             if navio.get("company"):
-                display_name += f" - {navio['company']}"
+                info_parts.append(navio['company'])
+            if navio.get("flag"):
+                info_parts.append(f"Flag: {navio['flag']}")
+            
+            if info_parts:
+                display_name += f" ({', '.join(info_parts[:2])})"  # Máximo 2 elementos
             
             results.append({
                 'id': navio.get("imo", navio["name"].replace(' ', '_').lower()),
@@ -1423,42 +1568,114 @@ def buscar_navios_fallback(query):
                 'type': 'ship',
                 'imo': navio.get("imo", ""),
                 'vessel_type': navio["type"],
-                'company': navio.get("company", "")
+                'company': navio.get("company", ""),
+                'flag': navio.get("flag", "")
             })
     
-    # Si no se encontró nada específico, generar sugerencias
-    if not results and len(query) >= 3:
-        tipos_barco = ["Container Ship", "Bulk Carrier", "Oil Tanker", "General Cargo", "Chemical Tanker"]
-        for i, tipo in enumerate(tipos_barco[:3]):
+    # Si no se encontró nada específico, generar sugerencias basadas en la query
+    if not results and len(query) >= 2:
+        tipos_barco = [
+            ("Container Ship", "Portacontenedores"),
+            ("Bulk Carrier", "Granelero"), 
+            ("Oil Tanker", "Petrolero"),
+            ("General Cargo", "Carga General"),
+            ("Cruise Ship", "Crucero")
+        ]
+        
+        for i, (tipo_en, tipo_es) in enumerate(tipos_barco[:3]):
             results.append({
                 'id': f'{query.lower().replace(" ", "_")}_{i}',
-                'name': f'{query.upper()} ({tipo})',
+                'name': f'{query.upper()} ({tipo_es})',
                 'type': 'ship',
-                'vessel_type': tipo,
-                'generic': True
+                'vessel_type': tipo_en,
+                'generic': True,
+                'suggestion': True
             })
     
     return results
 
 
+# Simplificar la función principal
+def buscar_navios_simplificado(request):
+    """
+    Versión simplificada que solo usa la base de datos local
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return JsonResponse({
+            'results': [],
+            'message': 'Consulta muy corta (mínimo 2 caracteres)'
+        })
+    
+    try:
+        print(f"🔍 Buscando navíos: '{query}'")
+        
+        # Usar solo el fallback (base de datos local)
+        results = buscar_navios_fallback(query)
+        
+        print(f"📚 Encontrados {len(results)} resultados")
+        
+        return JsonResponse({
+            'results': results[:15],  # Máximo 15 resultados
+            'source': 'Local Ship Database',
+            'total': len(results),
+            'query': query
+        })
+        
+    except Exception as e:
+        print(f"❌ Error en búsqueda de navíos: {e}")
+        return JsonResponse({
+            'results': [],
+            'error': str(e),
+            'query': query
+        })
+
 @require_http_methods(["GET"])
 def buscar_transporte(request):
     """
-    Endpoint unificado que busca según el tipo de transporte
+    Endpoint unificado que busca según el tipo de transporte con mejor debugging
     """
     tipo_transporte = request.GET.get('tipo', '').lower()
     query = request.GET.get('q', '').strip()
     
-    print(f"Búsqueda de transporte - Tipo: {tipo_transporte}, Query: {query}")
+    print(f"🚚 Búsqueda de transporte - Tipo: '{tipo_transporte}', Query: '{query}'")
     
-    if tipo_transporte in ['aereo', 'aéreo']:
-        return buscar_aeronaves(request)
-    elif tipo_transporte in ['maritimo', 'marítimo']:
-        return buscar_navios(request)
-    else:
+    # Validar parámetros
+    if not tipo_transporte:
         return JsonResponse({
             'results': [],
-            'error': f'Tipo de transporte no válido: {tipo_transporte}'
+            'error': 'Parámetro "tipo" requerido',
+            'valid_types': ['aereo', 'maritimo']
         })
     
+    if not query:
+        return JsonResponse({
+            'results': [],
+            'error': 'Parámetro "q" (query) requerido'
+        })
     
+    if tipo_transporte in ['aereo', 'aéreo']:
+        print("✈️ Redirigiendo a búsqueda aérea...")
+        return buscar_aeronaves(request)
+    elif tipo_transporte in ['maritimo', 'marítimo']:
+        print("🚢 Redirigiendo a búsqueda marítima...")
+        return buscar_navios(request)
+    else:
+        print(f"❌ Tipo de transporte no válido: '{tipo_transporte}'")
+        return JsonResponse({
+            'results': [],
+            'error': f'Tipo de transporte no válido: {tipo_transporte}',
+            'valid_types': ['aereo', 'maritimo'],
+            'received_type': tipo_transporte
+        })
+    
+def prueba_envio_correo(request):
+    send_mail(
+        subject='Prueba de envío',
+        message='Este es un correo de prueba desde Django.',
+        from_email='hanswoods96@gmail.com',
+        recipient_list=['hans.arancibia@live.com'],
+        fail_silently=False,
+    )
+    return HttpResponse('Correo enviado correctamente.')

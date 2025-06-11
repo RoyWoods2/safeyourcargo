@@ -32,4 +32,5 @@ urlpatterns = [
     path('api/buscar-aeronaves/', views.buscar_aeronaves, name='buscar_aeronaves'),
     path('api/buscar-navios/', views.buscar_navios, name='buscar_navios'),
     path('api/buscar-transporte/', views.buscar_transporte, name='buscar_transporte'),
+    path('prueba-envio/', views.prueba_envio_correo, name='prueba_envio_correo'),
 ]

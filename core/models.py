@@ -15,7 +15,8 @@ class Usuario(AbstractUser):
 
     # ⚡️ Campo que indica quién creó este usuario
     creado_por = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='usuarios_creados')
-
+    correo = models.EmailField()
+    telefono = models.CharField(max_length=20)
     def __str__(self):
         return f"{self.username} - {self.rol}"
 
@@ -33,8 +34,7 @@ class Cliente(models.Model):
     tipo_cliente = models.CharField(max_length=10, choices=TIPO_CLIENTE, default='empresa')
     nombre = models.CharField(max_length=255, unique=True)
     rut = models.CharField(max_length=15, unique=True)
-    correo = models.EmailField()
-    telefono = models.CharField(max_length=20)
+
     direccion = models.TextField()
     pais = models.CharField(max_length=100)
     ciudad = models.CharField(max_length=100)
@@ -47,7 +47,6 @@ class Cliente(models.Model):
     valor_minimo_congelado = models.DecimalField(max_digits=10, decimal_places=3)
 
     tramo_cobro = models.PositiveIntegerField()
-    tipo_alcance = models.CharField(max_length=20, choices=TIPO_ALCANCE, default='minorista')
     creado_por = models.ForeignKey(Usuario, null=True, blank=True, on_delete=models.SET_NULL, related_name='clientes_creados')
 
     def __str__(self):
@@ -86,12 +85,38 @@ class CertificadoTransporte(models.Model):
     viaje = models.OneToOneField('Viaje', on_delete=models.CASCADE)
     notas = models.OneToOneField('NotasNumeros', on_delete=models.CASCADE)
 
+    # ✅ CAMPOS NUEVOS PARA AUDITORÍA Y CONTROL DE USUARIOS
+    creado_por = models.ForeignKey(
+        Usuario, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='certificados_creados',
+        verbose_name='Creado por'
+    )
+    fecha_creacion = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Fecha de creación'
+    )
+    fecha_modificacion = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Última modificación'
+    )
+
+    class Meta:
+        verbose_name = 'Certificado de Transporte'
+        verbose_name_plural = 'Certificados de Transporte'
+        ordering = ['-fecha_creacion']  # Ordenar por fecha más reciente primero
+
     def calcular_valor_asegurado(self):
         return (self.tipo_mercancia.valor_fca + self.tipo_mercancia.valor_flete) * Decimal('1.10')
 
     def calcular_valor_prima(self):
         prima = self.calcular_valor_asegurado() * self.cliente.tasa
         return max(prima, 20.00)
+    
+    def __str__(self):
+        return f"C-{self.id} - {self.cliente.nombre if self.cliente else 'Sin cliente'}"
     
     
     
@@ -172,11 +197,10 @@ class Viaje(models.Model):
     
 
 class NotasNumeros(models.Model):
-    referencia = models.CharField(max_length=100)
+    referencia = models.CharField(max_length=200, blank=True, null=True)
     guia_carga = models.CharField(max_length=100)
-    numero_factura = models.CharField(max_length=100)
-    notas = models.TextField()
-
+    numero_factura = models.CharField(max_length=100, blank=True, null=True)
+    notas = models.TextField(blank=True, null=True)
 
 
 class Factura(models.Model):
@@ -196,6 +220,13 @@ class Factura(models.Model):
 
     folio_sii = models.PositiveIntegerField(null=True, blank=True, unique=True)
     observaciones = models.TextField(blank=True, null=True)
+    estado_emision = models.CharField(max_length=20, null=True, blank=True, choices=[
+    ('pendiente', 'Pendiente'),
+    ('exito', 'Emitida exitosamente'),
+    ('fallida', 'Con error'),
+    ('duplicado', 'Folio ya usado')
+])
+
 
     def save(self, *args, **kwargs):
         self.valor_clp = self.valor_usd * self.tipo_cambio
@@ -205,14 +236,27 @@ class Factura(models.Model):
         return f"Factura N° {self.numero} - Certificado C-{self.certificado.id}"
 
 # ✅ FUNCIÓN LIBRE (fuera del modelo)
-def obtener_siguiente_folio() -> int:
-    usados = Factura.objects.exclude(folio_sii__isnull=True).values_list('folio_sii', flat=True)
-    rango_disponible = range(521, 541)  # ← según CAF
-    for folio in rango_disponible:
-        if folio not in usados:
-            return folio
-    raise Exception("No hay folios disponibles")
+def obtener_siguiente_folio():
+    from .models import Factura, CAF
+    usado = set(Factura.objects.values_list("folio_sii", flat=True))
+    for caf in CAF.objects.filter(activo=True).order_by("desde"):
+        for folio in range(caf.desde, caf.hasta + 1):
+            if folio not in usado:
+                return folio
+    raise Exception("❌ No hay folios disponibles")
+
+
+class CAF(models.Model):
+    tipo_dte = models.PositiveSmallIntegerField()  # e.g. 34
+    desde = models.PositiveIntegerField()
+    hasta = models.PositiveIntegerField()
+    fecha_autorizacion = models.DateField()
+    activo = models.BooleanField(default=True)
     
+    def __str__(self):
+        return f"DTE {self.tipo_dte}: {self.desde}–{self.hasta}"
+
+
 class Cobranza(models.Model):
     certificado = models.OneToOneField('CertificadoTransporte', on_delete=models.CASCADE, related_name='cobranza')
 

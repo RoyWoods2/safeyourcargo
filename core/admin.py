@@ -4,32 +4,28 @@ from django.utils.translation import gettext_lazy as _
 from .models import *
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
-    list_display = ('username', 'email', 'rol', 'cliente', 'is_active', 'is_staff', 'pendiente_aprobacion')
-    list_filter = ('rol', 'is_active', 'is_staff', 'pendiente_aprobacion', 'cliente')
-    search_fields = ('username', 'email', 'cliente__nombre')
-    ordering = ('username',)
+    model = Usuario
 
-    fieldsets = (
-        (None, {'fields': ('username', 'password')}),
-        (_('Información personal'), {'fields': ('first_name', 'last_name', 'email')}),
-        (_('Permisos'), {
-            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+    list_display = ('username', 'correo', 'telefono', 'rol', 'is_active', 'is_superuser')
+    search_fields = ('username', 'correo', 'telefono')
+    list_filter = ('rol', 'is_active', 'is_superuser')
+
+    fieldsets = UserAdmin.fieldsets + (
+        ('Información adicional', {
+            'fields': ('correo', 'telefono', 'rol', 'cliente', 'pendiente_aprobacion', 'creado_por'),
         }),
-        (_('Fechas importantes'), {'fields': ('last_login', 'date_joined')}),
-        (_('Información adicional'), {'fields': ('rol', 'cliente', 'pendiente_aprobacion')}),
     )
 
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': ('username', 'email', 'password1', 'password2', 'rol', 'cliente', 'pendiente_aprobacion'),
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ('Información adicional', {
+            'fields': ('correo', 'telefono', 'rol', 'cliente'),
         }),
     )
     
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'rut', 'correo', 'telefono', 'ciudad', 'pais')
-    search_fields = ('nombre', 'rut', 'correo')
+    list_display = ('nombre', 'rut',  'ciudad', 'pais')
+    search_fields = ('nombre', 'rut')
     list_filter = ('pais', 'ciudad', 'tipo_cliente')
 
 @admin.register(Pais)

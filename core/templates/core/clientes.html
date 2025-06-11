@@ -59,12 +59,9 @@
                 <th>Razón Social</th>
                 <th>RUT</th>
                 <th>Dirección</th>
-                <th>Teléfono</th>
-                <th>Correo</th>
                 <th>País</th>
                 <th>Ciudad</th>
                 <th>Región</th>
-                <th>Código Postal</th>
                 <th>Tasa</th>
                 <th>Tasa Congelada</th>
                 <th>Valor Mínimo</th>
@@ -72,7 +69,6 @@
                 <th>Estado</th>
                 <th>Tramo Cobro</th>
                 <th>Tipo Cliente</th>
-                <th>Tipo Alcance</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -82,12 +78,9 @@
                 <td>{{ cliente.nombre }}</td>
                 <td>{{ cliente.rut }}</td>
                 <td>{{ cliente.direccion }}</td>
-                <td>{{ cliente.telefono }}</td>
-                <td>{{ cliente.correo }}</td>
                 <td>{{ cliente.pais }}</td>
                 <td>{{ cliente.ciudad }}</td>
                 <td>{{ cliente.region }}</td>
-                <td>{{ cliente.codigo_postal }}</td>
                 <td>{{ cliente.tasa }}</td>
                 <td>{{ cliente.tasa_congelada }}</td>
                 <td>{{ cliente.valor_minimo }}</td>
@@ -95,14 +88,12 @@
                 <td><span class="badge bg-success">Activo</span></td>
                 <td>{{ cliente.tramo_cobro }}</td>
                 <td>{{ cliente.tipo_cliente }}</td>
-                <td>{{ cliente.tipo_alcance }}</td>
                 <td>
   <button class="btn btn-sm btn-warning editar-btn" 
           data-id="{{ cliente.id }}"
           data-nombre="{{ cliente.nombre }}"
           data-rut="{{ cliente.rut }}"
-          data-correo="{{ cliente.correo }}"
-          data-telefono="{{ cliente.telefono }}"
+        
           data-direccion="{{ cliente.direccion }}"
           data-pais="{{ cliente.pais }}"
           data-ciudad="{{ cliente.ciudad }}"
@@ -114,7 +105,6 @@
           data-valor_minimo_congelado="{{ cliente.valor_minimo_congelado }}"
           data-tramo_cobro="{{ cliente.tramo_cobro }}"
           data-tipo_cliente="{{ cliente.tipo_cliente }}"
-          data-tipo_alcance="{{ cliente.tipo_alcance }}"
           data-bs-toggle="modal" data-bs-target="#modal-cliente">
     Editar
   </button>
@@ -182,8 +172,6 @@ document.addEventListener("DOMContentLoaded", function () {
             document.getElementById('cliente_id').value = this.dataset.id;
             document.getElementById('nombre').value = this.dataset.nombre;
             document.getElementById('rut').value = this.dataset.rut;
-            document.getElementById('correo').value = this.dataset.correo;
-            document.getElementById('telefono').value = this.dataset.telefono;
             document.getElementById('direccion').value = this.dataset.direccion;
             document.getElementById('pais').value = this.dataset.pais;
             document.getElementById('ciudad').value = this.dataset.ciudad;
@@ -196,7 +184,6 @@ document.addEventListener("DOMContentLoaded", function () {
             document.getElementById('tramo_cobro').value = this.dataset.tramo_cobro;
             document.getElementById('tipo_empresa').checked = this.dataset.tipo_cliente === "empresa";
             document.getElementById('tipo_persona').checked = this.dataset.tipo_cliente === "persona";
-            document.getElementById('minorista').checked = true;
 
             document.getElementById('modalClienteLabel').textContent = "Editar Cliente";
         });
@@ -254,8 +241,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const regionInput = document.getElementById("region");
   const rutInput = document.getElementById("rut");
   const formCliente = document.getElementById("form-cliente");
-
-  // ⚡ Cargar países apenas cargue la página
+  
+  // ⚡ Cargar países - MODIFICADO para solo Chile
   function cargarPaises() {
     paisSelect.empty().append('<option></option>');
     fetch("/api/paises/")
@@ -263,17 +250,20 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(data => {
         console.log("Respuesta /api/paises/:", data);
         if (data.paises && data.paises.length > 0) {
-          data.paises.forEach(pais => {
-            const option = new Option(pais.nombre, pais.nombre, false, false);
+          // 🔥 FILTRAR SOLO CHILE
+          const chile = data.paises.find(pais => pais.nombre === "Chile");
+          if (chile) {
+            const option = new Option(chile.nombre, chile.nombre, false, false);
             paisSelect.append(option);
-          });
+            
+          }
         }
       })
       .catch(err => console.error("Error cargando países:", err));
   }
-
+  
   cargarPaises(); // 🔥 Lo cargamos de una vez
-
+  
   // ⚡ Cuando abras el modal: forzar Select2 a "refrescarse"
   $("#modal-cliente").on("shown.bs.modal", function () {
     // 👉 Destruir select2 para forzar refresco de las opciones
@@ -283,19 +273,68 @@ document.addEventListener("DOMContentLoaded", function () {
     if (ciudadSelect.hasClass("select2-hidden-accessible")) {
       ciudadSelect.select2("destroy");
     }
-
-  
-    // 👉 Resetear ciudad y región
+ 
+    // 👉 Resetear ciudad y región - MODIFICADO
     ciudadSelect.empty().append('<option></option>').trigger("change.select2");
-    regionInput.value = "";
+    // 🔥 CAMBIAR REGIÓN A SELECT
+    if (regionInput && regionInput.tagName === 'INPUT') {
+      // Si aún es input, convertirlo a select
+      convertirRegionASelect();
+    } else {
+      // Si ya es select, solo resetear
+      document.getElementById("region").value = "";
+    }
   });
-
-  // 🔥 Al seleccionar país, cargar ciudades
+  
+  // 🔥 NUEVA FUNCIÓN: Convertir región a select
+  function convertirRegionASelect() {
+    const regionContainer = regionInput.parentElement;
+    const newSelect = document.createElement('select');
+    newSelect.id = 'region';
+    newSelect.name = 'region';
+    newSelect.className = 'form-select';
+    newSelect.required = true;
+    
+    // Agregar opciones de regiones chilenas
+    const regionesChile = [
+      { value: "", text: "Seleccionar región" },
+      { value: "Arica y Parinacota", text: "Arica y Parinacota" },
+      { value: "Tarapacá", text: "Tarapacá" },
+      { value: "Antofagasta", text: "Antofagasta" },
+      { value: "Atacama", text: "Atacama" },
+      { value: "Coquimbo", text: "Coquimbo" },
+      { value: "Valparaíso", text: "Valparaíso" },
+      { value: "Metropolitana de Santiago", text: "Metropolitana de Santiago" },
+      { value: "Libertador General Bernardo O'Higgins", text: "Libertador General Bernardo O'Higgins" },
+      { value: "Maule", text: "Maule" },
+      { value: "Ñuble", text: "Ñuble" },
+      { value: "Biobío", text: "Biobío" },
+      { value: "La Araucanía", text: "La Araucanía" },
+      { value: "Los Ríos", text: "Los Ríos" },
+      { value: "Los Lagos", text: "Los Lagos" },
+      { value: "Aysén del General Carlos Ibáñez del Campo", text: "Aysén del General Carlos Ibáñez del Campo" },
+      { value: "Magallanes y de la Antártica Chilena", text: "Magallanes y de la Antártica Chilena" }
+    ];
+    
+    regionesChile.forEach(region => {
+      const option = new Option(region.text, region.value);
+      newSelect.appendChild(option);
+    });
+    
+    regionContainer.replaceChild(newSelect, regionInput);
+  }
+  
+  // 🔥 Al seleccionar país, cargar ciudades (mantener funcionalidad original)
   paisSelect.on("change", function () {
     const paisNombre = $(this).val();
     ciudadSelect.empty().append('<option>Cargando...</option>').trigger("change.select2");
-    regionInput.value = "";
-
+    
+    // 🔥 RESETEAR REGIÓN
+    const regionSelect = document.getElementById("region");
+    if (regionSelect) {
+      regionSelect.value = "";
+    }
+    
     if (paisNombre) {
       fetch("/api/ciudades/", {
         method: "POST",
@@ -323,23 +362,8 @@ document.addEventListener("DOMContentLoaded", function () {
       ciudadSelect.empty().append('<option value="">Selecciona un país primero</option>').trigger("change.select2");
     }
   });
+  
 
-  // 📝 Formateo dinámico del RUT
-  rutInput.addEventListener('input', function (e) {
-    let rut = e.target.value.replace(/[^0-9kK]/g, '').toUpperCase();
-    let cuerpo = rut.slice(0, -1);
-    let dv = rut.slice(-1);
-    let cuerpoFormateado = '';
-    let cont = 0;
-    for (let i = cuerpo.length - 1; i >= 0; i--) {
-      cuerpoFormateado = cuerpo[i] + cuerpoFormateado;
-      cont++;
-      if (cont % 3 === 0 && i !== 0) {
-        cuerpoFormateado = '.' + cuerpoFormateado;
-      }
-    }
-    e.target.value = rut.length > 1 ? `${cuerpoFormateado}-${dv}` : rut;
-  });
 
   // 📝 CSRF helper
   function getCookie(name) {

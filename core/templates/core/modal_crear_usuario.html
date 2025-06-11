@@ -69,6 +69,18 @@
                 </div>
               </div>
             </div>
+            <div class="row mb-3">
+<div class="row mb-3">
+  <div class="col-md-6">
+    <label for="correo" class="form-label">Correo electrónico</label>
+    <input type="email" class="form-control" id="correo" name="correo" required>
+  </div>
+  <div class="col-md-6">
+    <label for="telefono" class="form-label">Teléfono</label>
+    <input type="text" class="form-control" id="telefono" name="telefono" required>
+  </div>
+</div>
+
 
             <div class="row mb-3">
               <div class="col-md-6">
@@ -164,6 +176,9 @@ document.querySelectorAll('[data-bs-target="#modal-usuario"]').forEach(button =>
         document.getElementById("usuario_id").value = usuarioId;
         document.getElementById("username").value = username;
         document.getElementById("password").value = "";
+        document.getElementById("correo").value = this.dataset.correo || "";
+        document.getElementById("telefono").value = this.dataset.telefono || "";
+
 
         // 5️⃣ Abrir modal
         document.getElementById("modalUsuarioLabel").textContent = usuarioId ? "Editar Usuario" : "Crear Usuario";

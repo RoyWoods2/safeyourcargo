@@ -6,12 +6,14 @@ from zeep import Client
 from zeep.helpers import serialize_object
 from core.models import Factura
 from lxml import etree
-# Configuración de conexión a facturacion.cl
+# 🔐 Producción
 FACTURACION_WSDL = 'http://ws.facturacion.cl/WSDS/wsplano.asmx?wsdl'
 FACTURACION_USUARIO = 'SAFEYOURCARGOSPA'
-FACTURACION_RUT = '78087058-3'
-FACTURACION_CLAVE = '818bb129c1'
+FACTURACION_RUT = '78087058-3'  # ← tu RUT real de empresa
+FACTURACION_CLAVE = '818bb129c1'  # ← clave de producción
 FACTURACION_PUERTO = '0'
+
+
 
 # 🔧 Limpieza de RUT para cumplir formato requerido
 def limpiar_rut(rut: str) -> str:
@@ -38,7 +40,9 @@ def generar_txt_factura_exenta(factura: Factura) -> str:
     direccion = cliente.direccion or "SIN DIRECCION"
     comuna = cliente.region or "SANTIAGO"
     ciudad = cliente.ciudad or "SANTIAGO"
-    correo = cliente.correo or "correo@cliente.cl"
+    correo = "correo@cliente.cl"
+    if hasattr(certificado, "creado_por") and certificado.creado_por:
+        correo = certificado.creado_por.correo or correo
     fecha = factura.fecha_emision.strftime("%Y-%m-%d")
     valor = int(factura.valor_clp)
 
@@ -68,22 +72,20 @@ def generar_txt_factura_exenta(factura: Factura) -> str:
 # ------------------------------------------
 # 🚀 Enviar archivo a facturacion.cl vía WebService
 # ------------------------------------------
-def emitir_factura_exenta_cl(factura: Factura) -> dict:
+def emitir_factura_exenta_cl_xml(factura: Factura) -> dict:
     try:
-        txt_data = generar_txt_factura_exenta(factura)
-
-        # Guardar archivo temporal para debug
-        ruta_debug = os.path.join(os.path.expanduser("~"), "Desktop", "DEBUG_FACTURA.TXT")
-        with open(ruta_debug, "w", encoding="latin-1", newline='\r\n') as f:
-            f.write(txt_data)
-
-        print(f"✅ Archivo de debug guardado en: {ruta_debug}")
+        # Generar XML
+        xml_data = generar_xml_factura_exenta(factura)
+        ruta_debug = os.path.join(os.path.expanduser("~"), "Desktop", f"FACTURA_C{factura.certificado.id}.xml")
+        
+        # Guardar archivo local para debug
+        with open(ruta_debug, "w", encoding="utf-8") as f:
+            f.write(xml_data)
 
         # Codificar archivo en base64
-        with open(ruta_debug, 'rb') as f:
-            encoded_file = base64.b64encode(f.read()).decode()
+        encoded_file = base64.b64encode(xml_data.encode('utf-8')).decode('utf-8')
 
-        # Login codificado
+        # Login info (base64 codificado)
         login_info = {
             'Usuario': base64.b64encode(FACTURACION_USUARIO.encode()).decode(),
             'Rut': base64.b64encode(FACTURACION_RUT.encode()).decode(),
@@ -92,23 +94,34 @@ def emitir_factura_exenta_cl(factura: Factura) -> dict:
             'IncluyeLink': "1"
         }
 
-        # Cliente SOAP
+        # Consumir WebService
         client = Client(FACTURACION_WSDL)
-        response = client.service.Procesar(login=login_info, file=encoded_file, formato="1")
+        response = client.service.Procesar(login=login_info, file=encoded_file, formato="2")
+        respuesta_xml = serialize_object(response)
 
-        # Log completo
-        print("🧾 CONTENIDO DEL ARCHIVO DEBUG:", file=sys.stderr)
-        print(txt_data, file=sys.stderr)
-        print("-" * 40)
-        print("📦 XML devuelto por Facturacion.cl:")
-        print(response)
+        # Determinar estado basado en contenido
+        estado = "exito"
+        if "Ya existe el Documento" in respuesta_xml:
+            estado = "duplicado"
+        elif "<Resultado>False</Resultado>" in respuesta_xml:
+            estado = "fallida"
 
-        return {'success': True, 'respuesta': serialize_object(response)}
+        # Guardar estado en la factura
+        factura.estado_emision = estado
+        factura.save()
+
+        return {
+            'success': True,
+            'respuesta': respuesta_xml,
+            'archivo_xml': ruta_debug
+        }
 
     except Exception as e:
+        factura.estado_emision = "fallida"
+        factura.save()
         return {'success': False, 'error': str(e)}
 
-# ------------------------------------------
+
 # 🔗 Obtener el PDF oficial desde facturacion.cl
 # ------------------------------------------
 def obtener_link_pdf_boleta(folio: int, tipo_dte: int = 34) -> dict:

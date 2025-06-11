@@ -90,7 +90,9 @@
     <button type="button"
             class="btn btn-outline-secondary btn-sm mt-1 toggle-estado-btn"
             data-id="{{ usuario.id }}"
-            data-estado="{{ usuario.is_active }}">
+            data-estado="{{ usuario.is_active }}"
+            data-correo="{{ usuario.correo }}"
+            data-telefono="{{ usuario.telefono }}">
       {% if usuario.is_active %}Desactivar{% else %}Activar{% endif %}
     </button>
   </td>

@@ -21,3 +21,6 @@ def obtener_dolar_observado(usuario: str, contrasena: str):
         return {"valor": valor_dolar, "fecha": fecha}
     except Exception as e:
         return {"error": str(e)}
+    
+    
+    

@@ -120,3 +120,12 @@ AUTH_USER_MODEL = 'core.Usuario'
 
 BCCH_USER = os.getenv("BCCH_USER")
 BCCH_PASS = os.getenv("BCCH_PASS")
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'hanswoods96@gmail.com'
+EMAIL_HOST_PASSWORD = 'kzuy sbtl rixv cqri'  # Contraseña de aplicación generada por Google
+DEFAULT_FROM_EMAIL = 'hanswoods96@gmail.com'  # recomendable agregar esta línea

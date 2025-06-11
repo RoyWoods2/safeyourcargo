@@ -1,7 +1,6 @@
 {% extends 'core/base.html' %}
 {% load static %}
 {% block content %}
-
 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
   <div>
     <h2 class="fw-bold mb-0">Certificados de Transporte</h2>
@@ -9,64 +8,130 @@
   </div>
   <div>
     <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-certificado">Nuevo Certificado</a>
-      </div>
+  </div>
 </div>
 
 <!-- FILTROS -->
-<form class="row mb-4 gx-3">
+<form method="GET" class="row mb-4 gx-3 bg-light p-3 rounded shadow-sm">
   <div class="col-md-3">
-    <label class="form-label">Fecha Inicio:</label>
-    <input type="date" name="inicio" class="form-control">
+    <label class="form-label fw-semibold">Fecha Inicio:</label>
+    <input type="date" name="inicio" class="form-control" value="{{ filtros.inicio }}">
   </div>
   <div class="col-md-3">
-    <label class="form-label">Fecha Fin:</label>
-    <input type="date" name="fin" class="form-control">
+    <label class="form-label fw-semibold">Fecha Fin:</label>
+    <input type="date" name="fin" class="form-control" value="{{ filtros.fin }}">
   </div>
-  <div class="col-md-4 ms-auto">
-    <label class="form-label">Buscar:</label>
-    <input type="text" name="q" class="form-control" placeholder="Buscar por cliente o número">
+  <div class="col-md-4">
+    <label class="form-label fw-semibold">Buscar:</label>
+    <input type="text" name="q" class="form-control" placeholder="Cliente, RUT, N° Certificado..." value="{{ filtros.q }}">
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <div class="d-grid w-100">
+      <button type="submit" class="btn btn-outline-primary">
+        <i class="bi bi-search"></i> Buscar
+      </button>
+    </div>
   </div>
 </form>
 
+<!-- Botón para limpiar filtros -->
+{% if filtros.inicio or filtros.fin or filtros.q %}
+<div class="text-end mb-3">
+  <a href="{% url 'crear_certificado' %}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-x-circle"></i> Limpiar filtros
+  </a>
+</div>
+{% endif %}
+
 <!-- TABLA DE CERTIFICADOS -->
-<table class="table table-sm table-hover table-bordered shadow-sm rounded bg-white small">
-  <thead class="table-light">
-    <tr class="align-middle text-center">
-      <th>#</th>
-      <th>N° Certificado</th>
-      <th>N° Factura</th>
-      <th>Cliente</th>
-      <th>RUT</th>
-      <th>Dirección</th>
-      <th>PDF Certificado</th>
-      <th>PDF Factura</th>
-    </tr>
-  </thead>
-  <tbody class="align-middle text-center">
-    {% for cert in certificados %}
-    <tr>
-      <td>{{ forloop.counter }}</td>
-      <td>C-{{ cert.id }}</td>
-      <td>{{ cert.notas.numero_factura }}</td>
-      <td>{{ cert.cliente.nombre }}</td>
-      <td>{{ cert.cliente.rut }}</td>
-      <td>{{ cert.cliente.direccion }}, {{ cert.cliente.ciudad }}, {{ cert.cliente.region }}</td>
-      <td>
-        <a href="{% url 'certificado_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-danger">
-          <i class="bi bi-file-earmark-pdf"></i>
-        </a>
-      </td>
-      <td>
-        <a href="{% url 'factura_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary">
-          <i class="bi bi-file-earmark-pdf"></i>
-        </a>
-      </td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="8" class="text-center text-muted">No hay certificados registrados.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="table-responsive">
+  <table class="table table-sm table-hover table-bordered shadow-sm rounded bg-white small">
+    <thead class="table-light">
+      <tr class="align-middle text-center">
+        <th>#</th>
+        <th>N° Certificado</th>
+        <th>N° Factura</th>
+        <th>Cliente</th>
+        <th>RUT</th>
+        <th>Dirección</th>
+        {% if user.is_superuser %}
+        <th>Creado por</th>
+        {% endif %}
+        <th>Fecha</th>
+        <th>PDF Certificado</th>
+        <th>PDF Factura</th>
+      </tr>
+    </thead>
+    <tbody class="align-middle text-center">
+      {% for cert in certificados %}
+      <tr>
+        <td>{{ forloop.counter0|add:certificados.start_index }}</td>
+        <td><strong>C-{{ cert.id }}</strong></td>
+        <td>{{ cert.notas.numero_factura|default:"-" }}</td>
+        <td>{{ cert.cliente.nombre }}</td>
+        <td>{{ cert.cliente.rut }}</td>
+        <td class="text-start small">
+          {{ cert.cliente.direccion }}
+          {% if cert.cliente.ciudad %}, {{ cert.cliente.ciudad }}{% endif %}
+          {% if cert.cliente.region %}, {{ cert.cliente.region }}{% endif %}
+        </td>
+        {% if user.is_superuser %}
+        <td>
+          <span class="badge bg-secondary">
+            {% if cert.creado_por %}
+              {{ cert.creado_por.first_name|default:cert.creado_por.username }}
+            {% else %}
+              Sistema
+            {% endif %}
+          </span>
+        </td>
+        {% endif %}
+        <td>
+          {% if cert.fecha_creacion %}
+            {{ cert.fecha_creacion|date:"d/m/Y" }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>
+          <a href="{% url 'certificado_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF Certificado">
+            <i class="bi bi-file-earmark-pdf"></i>
+          </a>
+        </td>
+        <td>
+          <a href="{% url 'factura_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver PDF Factura">
+            <i class="bi bi-file-earmark-pdf"></i>
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="{% if user.is_superuser %}10{% else %}9{% endif %}" class="text-center text-muted py-4">
+          {% if filtros.inicio or filtros.fin or filtros.q %}
+            No se encontraron certificados con los filtros aplicados.
+          {% else %}
+            No hay certificados registrados.
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- INFORMACIÓN DE RESULTADOS -->
+{% if certificados %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <small class="text-muted">
+    Mostrando {{ certificados.start_index }} - {{ certificados.end_index }} de {{ certificados.paginator.count }} certificados
+  </small>
+  {% if not user.is_superuser %}
+  <small class="text-info">
+    <i class="bi bi-info-circle"></i> Viendo solo tus certificados
+  </small>
+  {% endif %}
+</div>
+{% endif %}
 
 <!-- PAGINACIÓN -->
 {% if certificados.has_other_pages %}
@@ -74,21 +139,31 @@
   <ul class="pagination justify-content-center">
     {% if certificados.has_previous %}
     <li class="page-item">
-      <a class="page-link" href="?page={{ certificados.previous_page_number }}">Anterior</a>
+      <a class="page-link" href="?page={{ certificados.previous_page_number }}{% if filtros.inicio %}&inicio={{ filtros.inicio }}{% endif %}{% if filtros.fin %}&fin={{ filtros.fin }}{% endif %}{% if filtros.q %}&q={{ filtros.q }}{% endif %}">
+        Anterior
+      </a>
     </li>
     {% endif %}
-
+    
     {% for num in certificados.paginator.page_range %}
       {% if certificados.number == num %}
-      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+      <li class="page-item active">
+        <span class="page-link">{{ num }}</span>
+      </li>
       {% else %}
-      <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+      <li class="page-item">
+        <a class="page-link" href="?page={{ num }}{% if filtros.inicio %}&inicio={{ filtros.inicio }}{% endif %}{% if filtros.fin %}&fin={{ filtros.fin }}{% endif %}{% if filtros.q %}&q={{ filtros.q }}{% endif %}">
+          {{ num }}
+        </a>
+      </li>
       {% endif %}
     {% endfor %}
-
+    
     {% if certificados.has_next %}
     <li class="page-item">
-      <a class="page-link" href="?page={{ certificados.next_page_number }}">Siguiente</a>
+      <a class="page-link" href="?page={{ certificados.next_page_number }}{% if filtros.inicio %}&inicio={{ filtros.inicio }}{% endif %}{% if filtros.fin %}&fin={{ filtros.fin }}{% endif %}{% if filtros.q %}&q={{ filtros.q }}{% endif %}">
+        Siguiente
+      </a>
     </li>
     {% endif %}
   </ul>
@@ -97,6 +172,27 @@
 
 <!-- MODAL DE CREACIÓN -->
 {% include "certificados/modal_crear_certificado.html" %}
+
+<style>
+.table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+}
+
+.table-responsive {
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.bg-light {
+  background-color: #f8f9fa !important;
+}
+</style>
 
 {% endblock %}
 

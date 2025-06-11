@@ -9,10 +9,10 @@ class ClienteForm(forms.ModelForm):
     class Meta:
         model = Cliente
         fields = [
-            'tipo_cliente', 'nombre', 'rut', 'correo', 'telefono', 'direccion',
+            'tipo_cliente', 'nombre', 'rut','direccion',
             'pais', 'ciudad', 'region',
             'tasa', 'valor_minimo', 'tasa_congelada', 'valor_minimo_congelado',
-            'tramo_cobro', 'tipo_alcance'
+            'tramo_cobro'
         ]
     def clean_nombre(self):
         nombre = self.cleaned_data['nombre']
@@ -28,7 +28,7 @@ class UsuarioForm(forms.ModelForm):
 
     class Meta:
         model = Usuario
-        fields = ['username', 'password', 'rol', 'cliente']
+        fields = ['username', 'password', 'rol', 'cliente', 'correo', 'telefono']
 
     def clean_username(self):
         username = self.cleaned_data['username']
@@ -60,6 +60,18 @@ class CertificadoTransporteForm(forms.ModelForm):
             'fecha_partida': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'fecha_llegada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+        if user and not user.is_superuser:
+            # Si Cliente tiene campo creado_por
+            self.fields['cliente'].queryset = Cliente.objects.filter(creado_por=user)
+
+            # O si hay relación Cliente.usuarios → Usuario
+            # self.fields['cliente'].queryset = Cliente.objects.filter(usuarios__creado_por=user).distinct()
+
         
 class RutaForm(forms.ModelForm):
     class Meta:
@@ -193,3 +205,9 @@ class NotasNumerosForm(forms.ModelForm):
             'numero_factura': forms.TextInput(attrs={'class': 'form-control'}),
             'notas': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['referencia'].required = False
+        self.fields['numero_factura'].required = False
+        self.fields['notas'].required = False
