@@ -130,41 +130,73 @@
 document.addEventListener("DOMContentLoaded", function () {
     const form = document.getElementById("form-cliente");
 
+    let enviado = false;
+
     form.addEventListener("submit", function (e) {
-        e.preventDefault();
-        const formData = new FormData(form);
+      e.preventDefault();
 
-        fetch("{% url 'form_cliente' %}", {
-            method: "POST",
-            headers: {
-                "X-CSRFToken": getCookie("csrftoken"),
-                "X-Requested-With": "XMLHttpRequest"
-            },
-            body: formData
-        })
-        .then(async response => {
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                return response.json();
-            } else {
-                const text = await response.text();
-                throw new Error("Respuesta inesperada del servidor:\n" + text);
-            }
-        })
-        .then(data => {
-            if (data.success) {
-                alert("Cliente guardado correctamente.");
-                location.reload();
-            } else {
-                document.getElementById("form-container").innerHTML = data.html;
+      if (enviado) return; // evita doble envío
+      enviado = true;
 
-            }
-        })
-        .catch(err => {
-            console.error("Error:", err);
-            alert("Ocurrió un error al enviar el formulario. Revisa consola para más detalles.");
+      const formData = new FormData(form);
+
+      fetch("{% url 'form_cliente' %}", {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken"),
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        enviado = false; // permitir reenviar si es necesario
+
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Cliente creado',
+            text: 'El cliente ha sido creado correctamente.'
+          }).then(() => {
+            location.reload();
+          });
+        } else if (data.duplicate) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'RUT duplicado',
+            text: 'Ya existe un cliente con ese RUT.'
+          });
+        } else if (data.duplicate_nombre) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Nombre duplicado',
+            text: 'Ya existe un cliente con ese nombre.'
+          });
+        } else if (data.duplicate_nombre) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Nombre duplicado',
+            text: 'Ya existe un cliente con ese nombre.'
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Revisa los campos del formulario.'
+          });
+        }
+      })
+      .catch(err => {
+        enviado = false;
+        console.error("Error:", err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error inesperado',
+          text: 'No se pudo enviar el formulario.'
         });
+      });
     });
+
 
     // Editar cliente: llenar modal
     document.querySelectorAll('.editar-btn').forEach(button => {
@@ -381,31 +413,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return cookieValue;
   }
 
-  // 📝 Enviar formulario
-  formCliente.addEventListener("submit", function (e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-
-    fetch("{% url 'form_cliente' %}", {
-      method: "POST",
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken"),
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          location.reload();
-        } else {
-          alert("Error al guardar cliente.");
-        }
-      })
-      .catch(err => {
-        console.error("Error al enviar formulario:", err);
-      });
-  });
+  
 });
 </script>
 

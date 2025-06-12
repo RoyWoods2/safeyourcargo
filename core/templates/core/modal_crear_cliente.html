@@ -189,31 +189,6 @@ function getCookie(name) {
   }
   return cookieValue;
 }
-
-document.getElementById("form-cliente").addEventListener("submit", function (e) {
-  e.preventDefault();
-  const formData = new FormData(this);
-
-  fetch("{% url 'form_cliente' %}", {
-    method: "POST",
-    headers: {
-      "X-CSRFToken": getCookie("csrftoken"),
-      "X-Requested-With": "XMLHttpRequest"
-    },
-    body: formData
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        location.reload();
-      } else {
-        alert("Error al guardar cliente.");
-      }
-    })
-    .catch(err => {
-      console.error("Error al enviar formulario:", err);
-    });
-});
 </script>
 
 <script>

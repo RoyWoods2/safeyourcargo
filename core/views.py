@@ -21,6 +21,7 @@ import logging
 import tempfile
 import io
 import os
+from django.db import models
 from django.core.mail import send_mail
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.conf import settings
@@ -35,7 +36,7 @@ from django.db.models import Q, Count, Sum
 from .utils import registrar_actividad, obtener_dolar_observado
 from xml.etree.ElementTree import Element, SubElement, tostring
 from django.views.decorators.http import require_http_methods
-from .utils_pdf import generar_pdf_certificado, generar_pdf_factura
+from .utils_pdf import generar_pdf_certificado, generar_pdf_factura  
 Usuario = get_user_model()
 
 @login_required
@@ -163,17 +164,16 @@ def lista_clientes(request):
         clientes = Cliente.objects.all()
     else:
         if request.user.rol == 'Administrador':
-            # Clientes creados por él o por sus revendedores
             revendedores = Usuario.objects.filter(creado_por=request.user)
             clientes = Cliente.objects.filter(
                 models.Q(creado_por=request.user) |
                 models.Q(creado_por__in=revendedores)
             )
         else:
-            # Solo los clientes que él mismo creó
             clientes = Cliente.objects.filter(creado_por=request.user)
 
     return render(request, 'core/clientes.html', {'clientes': clientes})
+
 
 @login_required
 def form_cliente(request):
@@ -184,22 +184,39 @@ def form_cliente(request):
         return HttpResponseBadRequest("Solo se acepta AJAX aquí")
 
     cliente_id = request.POST.get("cliente_id")
+    rut = request.POST.get("rut")
+    nombre = request.POST.get("nombre")
+
     if cliente_id:
         cliente = get_object_or_404(Cliente, pk=cliente_id)
         form = ClienteForm(request.POST, instance=cliente)
     else:
+        # Verificar si el RUT ya existe antes de crear
+        if Cliente.objects.filter(rut=rut).exists():
+            return JsonResponse({
+                'success': False,
+                'errors': {'rut': ['El RUT ingresado ya existe.']},
+                'duplicate': True
+            }, status=400)
+
+        # Verificar si el NOMBRE ya existe antes de crear
+        if Cliente.objects.filter(nombre=nombre).exists():
+            return JsonResponse({
+                'success': False,
+                'errors': {'nombre': ['Ya existe un cliente con este nombre.']},
+                'duplicate_nombre': True
+            }, status=400)
+
         form = ClienteForm(request.POST)
 
     if form.is_valid():
         cliente = form.save(commit=False)
 
-        # Asignar creador solo si es creación
         if not cliente_id:
             cliente.creado_por = request.user
 
         cliente.save()
 
-        # 🔥 Registrar actividad
         if cliente_id:
             registrar_actividad(request.user, f"Editó cliente: {cliente.nombre}")
         else:
