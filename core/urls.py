@@ -33,4 +33,8 @@ urlpatterns = [
     path('api/buscar-navios/', views.buscar_navios, name='buscar_navios'),
     path('api/buscar-transporte/', views.buscar_transporte, name='buscar_transporte'),
     path('prueba-envio/', views.prueba_envio_correo, name='prueba_envio_correo'),
+    path('folios/', views.vista_folios_disponibles, name='vista_folios_disponibles'),
+    path('factura/<int:factura_id>/reenviar/', views.reenviar_factura_xml, name='reenviar_factura_xml'),
+    path('factura/<int:factura_id>/descargar/', views.descargar_factura_xml, name='descargar_factura_xml'),
+
 ]

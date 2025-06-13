@@ -237,13 +237,14 @@ class Factura(models.Model):
 
 # ✅ FUNCIÓN LIBRE (fuera del modelo)
 def obtener_siguiente_folio():
-    from .models import Factura, CAF
-    usado = set(Factura.objects.values_list("folio_sii", flat=True))
-    for caf in CAF.objects.filter(activo=True).order_by("desde"):
-        for folio in range(caf.desde, caf.hasta + 1):
-            if folio not in usado:
-                return folio
-    raise Exception("❌ No hay folios disponibles")
+    from .models import Factura
+    folio_min = 545
+    folio_max = 640
+    usados = Factura.objects.exclude(folio_sii__isnull=True).values_list('folio_sii', flat=True)
+    for folio in range(folio_min, folio_max + 1):
+        if folio not in usados:
+            return folio
+    raise Exception("No hay folios disponibles en el rango 540–640.")
 
 
 class CAF(models.Model):

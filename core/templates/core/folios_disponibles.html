@@ -1,0 +1,27 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>🧾 Gestión de Folios SII</h2>
+
+  <p><strong>Rango definido:</strong> {{ folio_min }} – {{ folio_max }}</p>
+  <p><strong>Total de folios:</strong> {{ total_folios }}</p>
+  <p><strong>Folios usados:</strong> {{ cantidad_usados }}</p>
+  <p><strong>Folios disponibles:</strong> {{ cantidad_disponibles }}</p>
+
+  <hr>
+  <h4>📌 Usados:</h4>
+  {% if folios_usados %}
+    <p>{{ folios_usados|join:", " }}</p>
+  {% else %}
+    <p class="text-muted">Ninguno usado aún.</p>
+  {% endif %}
+
+  <h4>✅ Disponibles:</h4>
+  {% if folios_disponibles %}
+    <p>{{ folios_disponibles|join:", " }}</p>
+  {% else %}
+    <p class="text-danger">¡No hay folios disponibles!</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -60,6 +60,7 @@
         <th>Fecha</th>
         <th>PDF Certificado</th>
         <th>PDF Factura</th>
+
       </tr>
     </thead>
     <tbody class="align-middle text-center">
@@ -102,6 +103,18 @@
           <a href="{% url 'factura_pdf' cert.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver PDF Factura">
             <i class="bi bi-file-earmark-pdf"></i>
           </a>
+          {% if request.user.is_superuser and cert.factura %}
+  <div class="btn-group btn-group-sm mt-1">
+    <a href="{% url 'descargar_factura_xml' cert.factura.id %}" class="btn btn-outline-primary" title="Descargar XML">
+      <i class="bi bi-download"></i>
+    </a>
+
+    <button class="btn btn-outline-warning reenviar-xml-btn" data-id="{{ cert.factura.id }}" title="Reenviar a Facturacion.cl">
+      <i class="bi bi-arrow-repeat"></i>
+    </button>
+  </div>
+{% endif %}
+
         </td>
       </tr>
       {% empty %}
@@ -250,6 +263,21 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".reenviar-xml-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const facturaId = btn.dataset.id;
+        if (!confirm("¿Estás seguro de reenviar el XML de esta factura a Facturacion.cl?")) return;
+
+        fetch(`factura/${facturaId}/reenviar/`)
+          .then(res => res.json())
+          .then(data => alert(data.mensaje || "Reintento realizado."))
+          .catch(err => alert("Error al reenviar XML."));
+      });
+    });
+  });
+</script>
 
 
 {% endblock %}

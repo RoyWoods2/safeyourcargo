@@ -37,6 +37,8 @@ from .utils import registrar_actividad, obtener_dolar_observado
 from xml.etree.ElementTree import Element, SubElement, tostring
 from django.views.decorators.http import require_http_methods
 from .utils_pdf import generar_pdf_certificado, generar_pdf_factura  
+from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.csrf import csrf_exempt
 Usuario = get_user_model()
 
 @login_required
@@ -479,6 +481,7 @@ def crear_certificado(request):
             factura.valor_clp = factura.valor_usd * dolar
 
 
+            factura.folio_sii = obtener_siguiente_folio()
             factura.save()
 
             # Emitir XML a Facturacion.cl
@@ -1696,3 +1699,59 @@ def prueba_envio_correo(request):
         fail_silently=False,
     )
     return HttpResponse('Correo enviado correctamente.')
+
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def vista_folios_disponibles(request):
+    from .models import Factura
+
+    folio_min = 545
+    folio_max = 640
+    usados = set(
+        Factura.objects
+        .exclude(folio_sii__isnull=True)
+        .values_list('folio_sii', flat=True)
+    )
+
+    todos = list(range(folio_min, folio_max + 1))
+    disponibles = sorted([f for f in todos if f not in usados])
+
+    context = {
+        'folio_min': folio_min,
+        'folio_max': folio_max,
+        'total_folios': folio_max - folio_min + 1,
+        'folios_usados': sorted(usados),
+        'folios_disponibles': disponibles,
+        'cantidad_disponibles': len(disponibles),
+        'cantidad_usados': len(usados),
+    }
+
+    return render(request, 'core/folios_disponibles.html', context)
+
+
+@user_passes_test(lambda u: u.is_superuser)
+def reenviar_factura_xml(request, factura_id):
+    factura = get_object_or_404(Factura, id=factura_id)
+
+    try:
+        resultado = emitir_factura_exenta_cl_xml(factura)
+        if resultado.get("success"):
+            mensaje = "✅ XML reenviado correctamente"
+        else:
+            mensaje = f"❌ Error al reenviar: {resultado.get('error')}"
+
+    except Exception as e:
+        mensaje = f"🧨 Excepción: {str(e)}"
+
+    return JsonResponse({"success": True, "mensaje": mensaje})
+
+
+@user_passes_test(lambda u: u.is_superuser)
+def descargar_factura_xml(request, factura_id):
+    factura = get_object_or_404(Factura, id=factura_id)
+    contenido = generar_xml_factura_exenta(factura)
+    filename = f"factura_exenta_C{factura.certificado.id}.xml"
+    response = HttpResponse(contenido, content_type='application/xml')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
