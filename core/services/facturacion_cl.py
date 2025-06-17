@@ -160,18 +160,23 @@ def normalizar_rut(rut: str) -> str:
     return rut
 
 def generar_xml_factura_exenta(factura: Factura) -> str:
-    certificado = factura.certificado
-    cliente = factura.certificado.cliente
+    from lxml import etree
+    import re
+    from core.services.facturacion_cl import limpiar_rut
 
-    # RUT limpio y normalizado
-    rut_limpio = "76000555-0"
-    cdg_int = "760005550"
+    certificado = factura.certificado
+    cliente = certificado.cliente
+
+    # RUT limpio
+    rut_limpio = limpiar_rut(cliente.rut or "11111111-1")
+    cdg_int = re.sub(r'\D', '', cliente.rut or "11111111-1")  # Solo dígitos
 
     root = etree.Element("DTE", version="1.0")
     documento = etree.SubElement(root, "Documento", ID="F1T34")
 
     # Encabezado
     encabezado = etree.SubElement(documento, "Encabezado")
+
     iddoc = etree.SubElement(encabezado, "IdDoc")
     etree.SubElement(iddoc, "TipoDTE").text = "34"
     etree.SubElement(iddoc, "Folio").text = str(factura.folio_sii)
@@ -187,17 +192,18 @@ def generar_xml_factura_exenta(factura: Factura) -> str:
     etree.SubElement(emisor, "CiudadOrigen").text = "Santiago"
 
     receptor = etree.SubElement(encabezado, "Receptor")
-    etree.SubElement(receptor, "RUTRecep").text = "78087058-3"
-    etree.SubElement(receptor, "CdgIntRecep").text = "780870583"  # sin guión ni puntos
-    etree.SubElement(receptor, "RznSocRecep").text = "supercliente"
-    etree.SubElement(receptor, "GiroRecep").text = "PARTICULAR"
-    etree.SubElement(receptor, "DirRecep").text = "Agustinas 1234"
-    etree.SubElement(receptor, "CmnaRecep").text = "Santiago"
-    etree.SubElement(receptor, "CiudadRecep").text = "Santiago"
+    etree.SubElement(receptor, "RUTRecep").text = rut_limpio
+    etree.SubElement(receptor, "CdgIntRecep").text = cdg_int
+    etree.SubElement(receptor, "RznSocRecep").text = cliente.nombre or "CLIENTE"
+    etree.SubElement(receptor, "GiroRecep").text = "SERVICIO"
+    etree.SubElement(receptor, "DirRecep").text = cliente.direccion or "SIN DIRECCIÓN"
+    etree.SubElement(receptor, "CmnaRecep").text = cliente.region or "SANTIAGO"
+    etree.SubElement(receptor, "CiudadRecep").text = cliente.ciudad or "SANTIAGO"
 
     totales = etree.SubElement(encabezado, "Totales")
-    etree.SubElement(totales, "MntExe").text = str(int(factura.valor_clp))
-    etree.SubElement(totales, "MntTotal").text = str(int(factura.valor_clp))
+    monto = int(factura.valor_clp or 0)
+    etree.SubElement(totales, "MntExe").text = str(monto)
+    etree.SubElement(totales, "MntTotal").text = str(monto)
 
     # Detalle
     detalle = etree.SubElement(documento, "Detalle")
@@ -209,7 +215,7 @@ def generar_xml_factura_exenta(factura: Factura) -> str:
     etree.SubElement(detalle, "NmbItem").text = "Seguro de Carga"
     etree.SubElement(detalle, "QtyItem").text = "1"
     etree.SubElement(detalle, "UnmdItem").text = "UN"
-    etree.SubElement(detalle, "PrcItem").text = str(int(factura.valor_clp))
-    etree.SubElement(detalle, "MontoItem").text = str(int(factura.valor_clp))
+    etree.SubElement(detalle, "PrcItem").text = str(monto)
+    etree.SubElement(detalle, "MontoItem").text = str(monto)
 
     return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8")

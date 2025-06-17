@@ -36,5 +36,6 @@ urlpatterns = [
     path('folios/', views.vista_folios_disponibles, name='vista_folios_disponibles'),
     path('factura/<int:factura_id>/reenviar/', views.reenviar_factura_xml, name='reenviar_factura_xml'),
     path('factura/<int:factura_id>/descargar/', views.descargar_factura_xml, name='descargar_factura_xml'),
+    path('cobranzas/exportar/', views.exportar_cobranzas_excel, name='exportar_cobranzas_excel'),
 
 ]

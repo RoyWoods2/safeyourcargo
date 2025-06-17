@@ -1,5 +1,6 @@
 {% extends 'core/base.html' %}
 {% load static %}
+{% load format_utils %}
 
 {% block title %}Administración de Cobranzas - Safe Your Cargo{% endblock %}
 
@@ -46,72 +47,136 @@
     font-size: 0.875rem;
   }
 </style>
+<div class="text-end mb-3">
+  <a href="{% url 'exportar_cobranzas_excel' %}?cliente={{ filtros.cliente }}&rut={{ filtros.rut }}&certificado={{ filtros.certificado }}&inicio={{ filtros.inicio }}&fin={{ filtros.fin }}"
+     class="btn btn-success btn-sm">
+    <i class="bi bi-file-earmark-excel"></i> Descargar Excel
+  </a>
+</div>
 
-<div class="container mt-4">
-  <div class="encabezado-cobranzas">Consultar Cobranzas</div>
-  <div style="overflow-x: auto;">
+
+<!-- FILTROS -->
+<form method="GET" class="row mb-4 gx-3 bg-light p-3 rounded shadow-sm">
+  <div class="col-md-2">
+    <label class="form-label fw-semibold">Fecha Inicio:</label>
+    <input type="date" name="inicio" class="form-control" value="{{ filtros.inicio }}">
+  </div>
+  <div class="col-md-2">
+    <label class="form-label fw-semibold">Fecha Fin:</label>
+    <input type="date" name="fin" class="form-control" value="{{ filtros.fin }}">
+  </div>
+  <div class="col-md-2">
+    <label class="form-label fw-semibold">Cliente:</label>
+    <input type="text" name="cliente" class="form-control" placeholder="Nombre cliente..." value="{{ filtros.cliente }}">
+  </div>
+  <div class="col-md-2">
+    <label class="form-label fw-semibold">RUT:</label>
+    <input type="text" name="rut" class="form-control" placeholder="Ej: 12345678-9" value="{{ filtros.rut }}">
+  </div>
+  <div class="col-md-2">
+    <label class="form-label fw-semibold">Certificado:</label>
+    <input type="text" name="certificado" class="form-control" placeholder="Ej: 45" value="{{ filtros.certificado }}">
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <div class="d-grid w-100">
+      <button type="submit" class="btn btn-outline-primary">
+        <i class="bi bi-search"></i> Filtrar
+      </button>
+    </div>
+  </div>
+</form>
+{% if filtros.cliente or filtros.rut or filtros.certificado or filtros.inicio or filtros.fin %}
+  <div class="text-end mb-3">
+    <a href="{% url 'vista_cobranzas' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-x-circle"></i> Limpiar filtros
+    </a>
+  </div>
+{% endif %}
+
+
     <table id="cobranzaTable" class="table table-hover table-bordered align-middle text-nowrap">
 
     <thead>
-      <tr>
-        <th>ID</th>
-        <th>ID Reports</th>
-        <th>Reseller</th>
-        <th>Razón Social Asegurado</th>
-        <th>Fecha Solicitud</th>
-        <th>Tipo Movimiento</th>
-        <th>Tipo Carga</th>
-        <th>Valor FCA</th>
-        <th>Valor Flete</th>
-        <th>Monto Asegurado</th>
-        <th>Valor Prima</th>
-        <th>Valor Prima Cobro</th>
-        <th>Valor Prima Pago</th>
-        <th>Fecha Cobro</th>
-        <th>Estado</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for cobro in cobranzas %}
-      <tr>
+  <tr class="text-center align-middle">
+    <th>Número Certificado</th>
+    <th>Número Factura</th>
+    <th>Cliente</th>
+    <th>RUT</th>
+    <th>Valor Seguro (USD)</th>
+    <th>Valor Prima (USD)</th>
+    <th>Valor Factura (CLP)</th>
+    <th>Referencia</th>
+  </tr>
+</thead>
+<tbody>
+  {% for cobro in cobranzas %}
+  <tr class="text-center align-middle">
+    <td>C-{{ cobro.certificado.id }}</td>
+    <td>
+      {% if cobro.certificado.factura %}
+        {{ cobro.certificado.factura.numero }}
+      {% else %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    </td>
+    <td>{{ cobro.certificado.cliente.nombre }}</td>
+    <td>{{ cobro.certificado.cliente.rut}}</td>
+    <td>${{ cobro.monto_asegurado }}</td>
+    <td>${{ cobro.valor_prima_cobro }}</td>
+    <td>
+      {% if cobro.certificado.factura %}
+        ${{ cobro.certificado.factura.valor_clp|floatformat:0 }}
+      {% else %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    </td>
+    <td>{{ cobro.certificado.notas.referencia|default:"-" }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="8" class="text-center text-muted">No hay cobranzas registradas aún.</td>
+  </tr>
+  {% endfor %}
+</tbody>
 
-        <td>{{ cobro.certificado.id }}</td>
-        <td>{{ cobro.certificado.id|add:"100" }}</td>
-        <td>{{ cobro.certificado.cliente.nombre }}</td>
-        <td>{{ cobro.certificado.cliente.nombre }}</td>
-        <td>{{ cobro.certificado.fecha_partida }}</td>
-        <td>{{ cobro.certificado.metodo_embarque.modo_transporte }}</td>
-        <td>{{ cobro.certificado.metodo_embarque.get_tipo_carga_display }}</td>
-        <td>${{ cobro.valor_fca }}</td>
-        <td>${{ cobro.valor_flete }}</td>
-        <td>${{ cobro.monto_asegurado }}</td>
-        <td>${{ cobro.valor_prima_estimado }}</td>
-        <td>${{ cobro.valor_prima_cobro }}</td>
-        <td>${{ cobro.valor_prima_pago }}</td>
-        <td>{{ cobro.fecha_cobro|default:"-" }}</td>
-        <td>{{ cobro.get_estado_display }}</td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="16" class="text-center text-muted">No hay cobranzas registradas aún.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
   </table>
 </div>
 {% endblock %}
 
 {% block extrajs %}
-<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
+
+<!-- DataTables después de jQuery -->
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<!-- Script personalizado al final -->
 <script>
-  $(document).ready(function() {
-    $('#cobranzaTable').DataTable({
+  $(document).ready(function () {
+    const table = $('#cobranzaTable').DataTable({
       order: [[1, 'desc']],
       language: {
         url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json'
       }
     });
+
+    // Filtros personalizados
+    $('#filtro-cliente').on('keyup change', function () {
+      table.column(2).search(this.value).draw();
+    });
+
+    $('#filtro-rut').on('keyup change', function () {
+      table.column(3).search(this.value).draw();
+    });
+
+    $('#filtro-certificado').on('keyup change', function () {
+      table.column(0).search(this.value).draw();
+    });
+
+    $('#filtro-referencia').on('keyup change', function () {
+      table.column(7).search(this.value).draw();
+    });
   });
 </script>
+
+
 {% endblock %}

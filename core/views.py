@@ -39,6 +39,10 @@ from django.views.decorators.http import require_http_methods
 from .utils_pdf import generar_pdf_certificado, generar_pdf_factura  
 from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.csrf import csrf_exempt
+from datetime import datetime
+import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font
 Usuario = get_user_model()
 
 @login_required
@@ -695,9 +699,52 @@ def factura_confirmacion(request, pk):
 
 @login_required
 def vista_cobranzas(request):
-    cobranzas = Cobranza.objects.select_related('certificado', 'certificado__cliente', 'certificado__metodo_embarque').all()
-    return render(request, 'core/cobranzas.html', {'cobranzas': cobranzas})
+    cobranzas = Cobranza.objects.select_related(
+        'certificado', 'certificado__cliente', 'certificado__metodo_embarque', 'certificado__factura', 'certificado__notas'
+    ).all()
 
+    # Filtros desde GET
+    cliente = request.GET.get("cliente")
+    rut = request.GET.get("rut")
+    certificado = request.GET.get("certificado")
+    inicio = request.GET.get("inicio")
+    fin = request.GET.get("fin")
+
+    if cliente:
+        cobranzas = cobranzas.filter(certificado__cliente__nombre__icontains=cliente)
+
+    if rut:
+        cobranzas = cobranzas.filter(certificado__cliente__rut__icontains=rut)
+
+    if certificado:
+        cobranzas = cobranzas.filter(certificado__id__icontains=certificado)
+
+    if inicio:
+        try:
+            fecha_inicio = datetime.strptime(inicio, "%Y-%m-%d").date()
+            cobranzas = cobranzas.filter(certificado__fecha_creacion__gte=fecha_inicio)
+        except ValueError:
+            pass
+
+    if fin:
+        try:
+            fecha_fin = datetime.strptime(fin, "%Y-%m-%d").date()
+            cobranzas = cobranzas.filter(certificado__fecha_creacion__lte=fecha_fin)
+        except ValueError:
+            pass
+
+    filtros = {
+        "cliente": cliente or "",
+        "rut": rut or "",
+        "certificado": certificado or "",
+        "inicio": inicio or "",
+        "fin": fin or "",
+    }
+
+    return render(request, 'core/cobranzas.html', {
+        'cobranzas': cobranzas,
+        'filtros': filtros,
+    })
 
 @login_required
 def generar_pdf_cobranza(request, certificado_id):
@@ -1754,4 +1801,73 @@ def descargar_factura_xml(request, factura_id):
     filename = f"factura_exenta_C{factura.certificado.id}.xml"
     response = HttpResponse(contenido, content_type='application/xml')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+@login_required
+def exportar_cobranzas_excel(request):
+    from .models import Cobranza
+
+    cobranzas = Cobranza.objects.select_related(
+        'certificado', 'certificado__cliente', 'certificado__metodo_embarque', 'certificado__factura', 'certificado__notas'
+    ).all()
+
+    # Filtros iguales a vista principal
+    cliente = request.GET.get("cliente")
+    rut = request.GET.get("rut")
+    certificado = request.GET.get("certificado")
+    inicio = request.GET.get("inicio")
+    fin = request.GET.get("fin")
+
+    if cliente:
+        cobranzas = cobranzas.filter(certificado__cliente__nombre__icontains=cliente)
+    if rut:
+        cobranzas = cobranzas.filter(certificado__cliente__rut__icontains=rut)
+    if certificado:
+        cobranzas = cobranzas.filter(certificado__id__icontains=certificado)
+    if inicio:
+        cobranzas = cobranzas.filter(certificado__fecha_creacion__gte=inicio)
+    if fin:
+        cobranzas = cobranzas.filter(certificado__fecha_creacion__lte=fin)
+
+    # Crear archivo Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Reporte Cobranzas"
+
+    headers = [
+        "N° Certificado", "N° Factura", "Cliente", "RUT",
+        "Valor Seguro (USD)", "Valor Prima (USD)", "Valor Factura (CLP)", "Referencia"
+    ]
+    ws.append(headers)
+
+    for col in range(1, len(headers)+1):
+        ws.cell(row=1, column=col).font = Font(bold=True)
+        ws.cell(row=1, column=col).alignment = Alignment(horizontal="center")
+
+    for cobro in cobranzas:
+        cert = cobro.certificado
+        factura = cert.factura
+        cliente = cert.cliente
+
+        ws.append([
+            f"C-{cert.id}",
+            factura.numero if factura else "",
+            cliente.nombre,
+            cliente.rut,
+            float(cobro.monto_asegurado or 0),
+            float(cobro.valor_prima_cobro or 0),
+            float(factura.valor_clp) if factura and factura.valor_clp else 0,
+            cert.notas.referencia if cert.notas and cert.notas.referencia else "",
+        ])
+
+    # Ajustar tamaño de columnas
+    for i, col in enumerate(headers, 1):
+        ws.column_dimensions[get_column_letter(i)].width = 20
+
+    # Respuesta HTTP
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="reporte_cobranzas.xlsx"'
+    wb.save(response)
     return response

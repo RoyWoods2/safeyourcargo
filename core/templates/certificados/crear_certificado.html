@@ -262,22 +262,47 @@ document.addEventListener("DOMContentLoaded", function () {
   actualizarCamposEmbalaje();
 });
 </script>
-
 <script>
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".reenviar-xml-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         const facturaId = btn.dataset.id;
+
+        if (!facturaId) {
+          alert("Factura no válida.");
+          return;
+        }
+
         if (!confirm("¿Estás seguro de reenviar el XML de esta factura a Facturacion.cl?")) return;
 
-        fetch(`factura/${facturaId}/reenviar/`)
-          .then(res => res.json())
-          .then(data => alert(data.mensaje || "Reintento realizado."))
-          .catch(err => alert("Error al reenviar XML."));
+        // Mostrar spinner temporal
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+        fetch(`/factura/${facturaId}/reenviar/`, {
+          method: "GET",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje || "Reintento completado.");
+        })
+        .catch(err => {
+          console.error(err);
+          alert("❌ Error al reenviar el XML.");
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.innerHTML = originalHTML;
+        });
       });
     });
   });
 </script>
+
 
 
 {% endblock %}
