@@ -938,8 +938,8 @@ def probar_envio_factura(request):
     try:
         logs.append("🔍 Iniciando prueba de envío de factura...")
 
-        # Usamos el último certificado creado para pruebas
-        certificado = CertificadoTransporte.objects.select_related('cliente', 'ruta', 'tipo_mercancia').last()
+        # ✅ Usar el último certificado correctamente ordenado por ID
+        certificado = CertificadoTransporte.objects.select_related('cliente', 'ruta', 'tipo_mercancia').order_by('-id').first()
         if not certificado:
             messages.error(request, "❌ No hay certificados disponibles para simular el envío.")
             return redirect('crear_certificado')
@@ -966,11 +966,7 @@ def probar_envio_factura(request):
 
         # Obtener tipo de cambio actual
         resultado = obtener_dolar_observado("hans.arancibia@live.com", "Rhad19326366.")
-        if "valor" in resultado:
-            dolar = Decimal(resultado["valor"])
-        else:
-            dolar = Decimal('950.00')
-
+        dolar = Decimal(resultado.get("valor", '950.00'))
 
         factura.tipo_cambio = dolar
         factura.valor_clp = (factura.valor_usd or Decimal('0.0')) * dolar
@@ -979,7 +975,7 @@ def probar_envio_factura(request):
         logs.append(f"📦 Factura generada (USD {factura.valor_usd} → CLP {factura.valor_clp})")
 
         # Enviar a facturacion.cl
-        resultado = emitir_factura_exenta_cl(factura)
+        resultado = emitir_factura_exenta_cl_xml(factura)
         if resultado.get('success'):
             logs.append("✅ ENVÍO EXITOSO a Facturacion.cl")
             logs.append(f"📨 Respuesta: {resultado['respuesta']}")
@@ -992,6 +988,7 @@ def probar_envio_factura(request):
         logs.append(str(ex))
 
     return render(request, 'certificados/prueba_envio_resultado.html', {'logs': logs})
+
 
 
 @login_required
