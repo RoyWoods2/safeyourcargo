@@ -76,11 +76,12 @@ def emitir_factura_exenta_cl_xml(factura: Factura) -> dict:
     try:
         # Generar XML
         xml_data = generar_xml_factura_exenta(factura)
-        ruta_debug = os.path.join(os.path.expanduser("~"), "Desktop", f"FACTURA_C{factura.certificado.id}.xml")
-        
-        # Guardar archivo local para debug
-        with open(ruta_debug, "w", encoding="utf-8") as f:
-            f.write(xml_data)
+        ruta_debug = f"/var/www/uniCloud/xml_facturas/FACTURA_C{factura.certificado.id}.xml"
+        try:
+            with open(ruta_debug, "w", encoding="utf-8") as f:
+                f.write(xml_data)
+        except Exception as e:
+            print(f"⚠️ No se pudo guardar el XML localmente: {str(e)}")
 
         # Codificar archivo en base64
         encoded_file = base64.b64encode(xml_data.encode('utf-8')).decode('utf-8')
