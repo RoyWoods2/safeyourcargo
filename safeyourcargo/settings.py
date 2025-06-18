@@ -123,9 +123,9 @@ BCCH_PASS = os.getenv("BCCH_PASS")
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'mail.nautics.cl'   # usualmente es mail.<dominio>
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'hanswoods96@gmail.com'
-EMAIL_HOST_PASSWORD = 'kzuy sbtl rixv cqri'  # Contraseña de aplicación generada por Google
-DEFAULT_FROM_EMAIL = 'hanswoods96@gmail.com'  # recomendable agregar esta línea
+EMAIL_HOST_USER = 'no-reply@nautics.cl'
+EMAIL_HOST_PASSWORD = 'Rhad19326366.'
+DEFAULT_FROM_EMAIL = 'no-reply@nautics.cl'

@@ -226,14 +226,18 @@ class Factura(models.Model):
     ('fallida', 'Con error'),
     ('duplicado', 'Folio ya usado')
 ])
+def save(self, *args, **kwargs):
+    envio_automatico = self.pk is None
+    self.valor_clp = self.valor_usd * self.tipo_cambio
+    super().save(*args, **kwargs)
 
+    if envio_automatico:
+        try:
+            from core.utils import enviar_factura_y_certificado
+            enviar_factura_y_certificado(self)
+        except Exception as e:
+            print(f"❌ Error al enviar automáticamente correo con factura y certificado: {e}")
 
-    def save(self, *args, **kwargs):
-        self.valor_clp = self.valor_usd * self.tipo_cambio
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"Factura N° {self.numero} - Certificado C-{self.certificado.id}"
 
 # ✅ FUNCIÓN LIBRE (fuera del modelo)
 def obtener_siguiente_folio():

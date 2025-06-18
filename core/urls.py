@@ -37,5 +37,7 @@ urlpatterns = [
     path('factura/<int:factura_id>/reenviar/', views.reenviar_factura_xml, name='reenviar_factura_xml'),
     path('factura/<int:factura_id>/descargar/', views.descargar_factura_xml, name='descargar_factura_xml'),
     path('cobranzas/exportar/', views.exportar_cobranzas_excel, name='exportar_cobranzas_excel'),
+    path('test-correo/', views.test_envio_email, name='test_envio_email'),
+    path('test-email/', views.test_envio_profesional, name='test_email'),
 
 ]

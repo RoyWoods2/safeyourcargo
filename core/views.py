@@ -1868,3 +1868,78 @@ def exportar_cobranzas_excel(request):
     response['Content-Disposition'] = 'attachment; filename="reporte_cobranzas.xlsx"'
     wb.save(response)
     return response
+
+
+
+def test_envio_email(request):
+    try:
+        # Obtener el último certificado y su factura relacionada
+        certificado = CertificadoTransporte.objects.latest('id')
+        factura = Factura.objects.filter(certificado=certificado).latest('id')
+
+        # Rutas locales (ajustar si fuera necesario)
+        ruta_certificado_pdf = r"C:\Users\HansA\Desktop\certificado_test.pdf"
+        ruta_factura_pdf = r"C:\Users\HansA\Desktop\factura_test.pdf"
+
+        if not os.path.exists(ruta_certificado_pdf) or not os.path.exists(ruta_factura_pdf):
+            return HttpResponse("❌ Uno de los archivos PDF no fue encontrado en el escritorio.")
+
+        asunto = f"📄 Documentos: Certificado #{certificado.id} y Factura"
+        mensaje = f"""
+        Estimado/a,
+
+        Se adjuntan los documentos correspondientes al Certificado #{certificado.id}:
+
+        - Certificado de Transporte
+        - Factura Exenta Electrónica
+
+        Saludos cordiales,
+        SAFEYOURCARGO SPA
+        """
+
+        destinatarios = [
+            "Jgonzalez@safeyourcargo.com",
+            "Contacto@safeyourcargo.com",
+            "Finanzas@safeyourcargo.com",
+            "hans.arancibia@live.com"
+        ]
+
+        # Agregar correo del creador del certificado
+        if certificado.creado_por and certificado.creado_por.correo:
+            destinatarios.append(certificado.creado_por.correo)
+
+        email = EmailMessage(
+            subject=asunto,
+            body=mensaje,
+            from_email="no-reply@nautics.cl",  # ✅ Cambiado aquí
+            to=destinatarios
+        )
+
+        email.attach_file(ruta_certificado_pdf)
+        email.attach_file(ruta_factura_pdf)
+        email.send()
+
+        return HttpResponse("✅ Correo enviado correctamente desde no-reply@nautics.cl con los PDFs adjuntos.")
+    
+    except CertificadoTransporte.DoesNotExist:
+        return HttpResponse("❌ No se encontró ningún certificado.")
+    except Factura.DoesNotExist:
+        return HttpResponse("❌ No se encontró factura relacionada al último certificado.")
+    except Exception as e:
+        return HttpResponse(f"❌ Error inesperado: {str(e)}")
+    
+    
+def test_envio_profesional(request):
+    try:
+        send_mail(
+            subject="✅ Test de envío desde Nautics.cl",
+            message="Este es un correo de prueba enviado desde el sistema SAFEYOURCARGO usando un remitente profesional.",
+            from_email="no-reply@nautics.cl",
+            recipient_list=["hans.arancibia@live.com"],  # pon aquí el tuyo para probar
+            fail_silently=False,
+        )
+        return HttpResponse("✅ Correo enviado correctamente desde no-reply@nautics.cl.")
+    except Exception as e:
+        return HttpResponse(f"❌ Error al enviar: {str(e)}")
+    
+    
