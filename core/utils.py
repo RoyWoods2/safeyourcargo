@@ -33,22 +33,28 @@ def obtener_dolar_observado(usuario: str, contrasena: str):
 def enviar_factura_y_certificado(factura):
     certificado = factura.certificado
 
+    # 📁 Ruta absoluta al directorio base de tu proyecto (para imágenes y CSS en PDF)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    static_path = os.path.join(base_dir, 'static')
+
+    # Renderizar templates
     html_cert = render_to_string('pdf/certificado_pdf.html', {'certificado': certificado})
     html_fact = render_to_string('pdf/factura_pdf.html', {'factura': factura})
 
+    # Generar PDFs
     pdf_cert = BytesIO()
-    HTML(string=html_cert).write_pdf(target=pdf_cert)
+    HTML(string=html_cert, base_url=static_path).write_pdf(target=pdf_cert)
     pdf_cert.seek(0)
 
     pdf_fact = BytesIO()
-    HTML(string=html_fact).write_pdf(target=pdf_fact)
+    HTML(string=html_fact, base_url=static_path).write_pdf(target=pdf_fact)
     pdf_fact.seek(0)
 
+    # Correos destino
     destinatarios = [
         "Jgonzalez@safeyourcargo.com",
         "Contacto@safeyourcargo.com",
         "Finanzas@safeyourcargo.com",
-        "hans.arancibia@live.com"
     ]
     if certificado.creado_por and certificado.creado_por.correo:
         destinatarios.append(certificado.creado_por.correo)
@@ -76,12 +82,10 @@ def enviar_factura_y_certificado(factura):
     email.attach('factura.pdf', pdf_fact.read(), 'application/pdf')
     email.send()
 
-    # Registrar en el log
+    # Registrar en LogActividad
     if certificado.creado_por:
         LogActividad.objects.create(
             usuario=certificado.creado_por,
-            mensaje=f"Se envió por correo el Certificado C-{certificado.id} y la Factura #{factura.numero}."
+            accion=f"Se envió por correo el Certificado C-{certificado.id} y la Factura #{factura.numero}."
         )
-    
-    
     
