@@ -102,7 +102,7 @@
       <strong>R.U.T.: 78.087.058-3</strong>
       FACTURA NO AFECTA O<br>
       EXENTA ELECTRONICA<br>
-      <strong>Nº {{ factura.numero }}</strong>
+      <strong>Nº {{ factura.folio_sii }}</strong>
       <br>
       S.I.I. - VIÑA DEL MAR<br>
       {{ fecha_formateada|upper }}
@@ -157,7 +157,8 @@
         <td>SEGURO DE CARGA<br>
           DCTO CARGA: {{ factura.certificado.notas.guia_carga }}<br>
           C-{{ factura.certificado.id }}<br>
-          TC {{ factura.tipo_cambio }}<br>
+          TC {{ factura.tipo_cambio|floatformat:2 }}<br>
+
           PRIMA USD$ {{ factura.valor_usd }}
         </td>
         <td>UN</td>
