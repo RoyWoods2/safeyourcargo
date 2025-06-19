@@ -43,6 +43,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font
+from core.emails import enviar_certificado_y_factura
 Usuario = get_user_model()
 
 @login_required
@@ -502,24 +503,10 @@ def crear_certificado(request):
 
             # Enviar correo
             User = get_user_model()
-            superadmins = User.objects.filter(is_superuser=True, is_active=True).values_list('email', flat=True)
-            destinatarios = list(set([request.user.email] + list(superadmins)))
+            superadmins = User.objects.filter(is_superuser=True, is_active=True).values_list('correo', flat=True)
 
-            mensaje = EmailMessage(
-                subject=f"📄 Certificado generado: C-{certificado.id}",
-                body=f"Estimado/a {request.user.username},\n\nSe ha generado correctamente el certificado C-{certificado.id} para el cliente {certificado.cliente.nombre}.\nAdjunto encontrarás los documentos PDF.\n\nSaludos,\nSistema UniCloud",
-                from_email="no-reply@unisource.cl",
-                to=destinatarios
-            )
-            mensaje.attach(f"certificado-C{certificado.id}.pdf", pdf_cert.getvalue(), "application/pdf")
-            mensaje.attach(f"factura-C{certificado.id}.pdf", pdf_fact.getvalue(), "application/pdf")
-
-            try:
-                mensaje.send(fail_silently=False)
-                logger.info(f"✅ Correo enviado correctamente a {destinatarios}")
-            except Exception as e:
-                logger.error(f"❌ Error al enviar correo de C-{certificado.id}: {str(e)}")
-
+            enviar_certificado_y_factura(certificado, pdf_cert, pdf_fact, destinatarios_extra=list(superadmins))
+            
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
@@ -1871,75 +1858,23 @@ def exportar_cobranzas_excel(request):
 
 
 
-def test_envio_email(request):
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def test_envio_certificado_real(request):
     try:
-        # Obtener el último certificado y su factura relacionada
         certificado = CertificadoTransporte.objects.latest('id')
-        factura = Factura.objects.filter(certificado=certificado).latest('id')
+        pdf_cert = generar_pdf_certificado(certificado, request)
+        pdf_fact = generar_pdf_factura(certificado, request)
 
-        # Rutas locales (ajustar si fuera necesario)
-        ruta_certificado_pdf = r"C:\Users\HansA\Desktop\certificado_test.pdf"
-        ruta_factura_pdf = r"C:\Users\HansA\Desktop\factura_test.pdf"
-
-        if not os.path.exists(ruta_certificado_pdf) or not os.path.exists(ruta_factura_pdf):
-            return HttpResponse("❌ Uno de los archivos PDF no fue encontrado en el escritorio.")
-
-        asunto = f"📄 Documentos: Certificado #{certificado.id} y Factura"
-        mensaje = f"""
-        Estimado/a,
-
-        Se adjuntan los documentos correspondientes al Certificado #{certificado.id}:
-
-        - Certificado de Transporte
-        - Factura Exenta Electrónica
-
-        Saludos cordiales,
-        SAFEYOURCARGO SPA
-        """
-
-        destinatarios = [
-            "Jgonzalez@safeyourcargo.com",
-            "Contacto@safeyourcargo.com",
-            "Finanzas@safeyourcargo.com",
-            "hans.arancibia@live.com"
-        ]
-
-        # Agregar correo del creador del certificado
+        # Destinatarios de prueba
+        destinatarios = ['hans.arancibia@live.com']  # agrega otros si quieres
         if certificado.creado_por and certificado.creado_por.correo:
             destinatarios.append(certificado.creado_por.correo)
 
-        email = EmailMessage(
-            subject=asunto,
-            body=mensaje,
-            from_email="no-reply@nautics.cl",  # ✅ Cambiado aquí
-            to=destinatarios
-        )
+        enviar_certificado_y_factura(certificado, pdf_cert, pdf_fact, destinatarios)
 
-        email.attach_file(ruta_certificado_pdf)
-        email.attach_file(ruta_factura_pdf)
-        email.send()
+        return HttpResponse("✅ Correo de prueba con certificado y factura enviado correctamente.")
+    except Exception as e:
+        return HttpResponse(f"❌ Error al enviar correo de prueba: {str(e)}")
 
-        return HttpResponse("✅ Correo enviado correctamente desde no-reply@nautics.cl con los PDFs adjuntos.")
-    
-    except CertificadoTransporte.DoesNotExist:
-        return HttpResponse("❌ No se encontró ningún certificado.")
-    except Factura.DoesNotExist:
-        return HttpResponse("❌ No se encontró factura relacionada al último certificado.")
-    except Exception as e:
-        return HttpResponse(f"❌ Error inesperado: {str(e)}")
-    
-    
-def test_envio_profesional(request):
-    try:
-        send_mail(
-            subject="✅ Test de envío desde Nautics.cl",
-            message="Este es un correo de prueba enviado desde el sistema SAFEYOURCARGO usando un remitente profesional.",
-            from_email="no-reply@nautics.cl",
-            recipient_list=["hans.arancibia@live.com"],  # pon aquí el tuyo para probar
-            fail_silently=False,
-        )
-        return HttpResponse("✅ Correo enviado correctamente desde no-reply@nautics.cl.")
-    except Exception as e:
-        return HttpResponse(f"❌ Error al enviar: {str(e)}")
-    
-    
+

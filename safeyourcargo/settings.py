@@ -123,9 +123,10 @@ BCCH_PASS = os.getenv("BCCH_PASS")
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'mail.nautics.cl'   # usualmente es mail.<dominio>
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'no-reply@nautics.cl'
+EMAIL_HOST = 'mail.safeyourcargo.com'
+EMAIL_PORT = 465
+EMAIL_HOST_USER = 'noreply@safeyourcargo.com'
 EMAIL_HOST_PASSWORD = 'Rhad19326366.'
-DEFAULT_FROM_EMAIL = 'no-reply@nautics.cl'
+EMAIL_USE_SSL = True  # Usa SSL porque el puerto es 465
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
